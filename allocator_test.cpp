@@ -1,14 +1,21 @@
 #include "stdafx.h"
 #include "allocator.h"
-#include <vector>
-#include <set>
-#include <iostream>
-//#include "gtest/gtest.h"
-//
-using namespace std;
-char buf[65536];
 
-//TEST(Allocator, AllocInRange)
+#include <set>
+#include <vector>
+#include <iostream>
+
+//#include "gtest/gtest.h"
+using namespace std;
+char  buf[65536];
+
+int  myprint (char *err)
+{
+ printf (err);
+ return 0;
+}
+
+// TEST (Allocator, AllocInRange)
 void AllocInRange ()
 {
  Allocator a (buf, sizeof (buf));
@@ -18,7 +25,7 @@ void AllocInRange ()
  char *v = reinterpret_cast<char*>(p.get ());
 
  if ( v > buf && (v + size) < (buf + sizeof (buf)) )
-  printf ("Error");
+  myprint ("Error");
 
  a.free (p);
 }
@@ -61,7 +68,7 @@ static bool fillUp        (Allocator &a, size_t allocSize, vector<Pointer> &out)
  return false;
 }
 
-//TEST(Allocator, AllocReadWrite) 
+// TEST (Allocator, AllocReadWrite) 
 void AllocReadWrite ()
 {
  Allocator a (buf, sizeof (buf));
@@ -73,7 +80,7 @@ void AllocReadWrite ()
   ptr.push_back (a.alloc (size));
 
   if ( !isValidMemory (ptr.back (), size) )
-   printf ("error");
+   myprint ("error");
   writeTo (ptr.back (), size);
  }
 
@@ -81,15 +88,15 @@ void AllocReadWrite ()
  // int i = 0;
  // for ( Pointer &p : ptr )
  // {
- //  fprintf (f, "\ni=%d ptr=%d", i++, p.get ());
+ //  fmyprint (f, "\ni=%d ptr=%d", i++, p.get ());
  // }
- // fprintf (f, "\n");
+ // fmyprint (f, "\n");
  // fclose (f);
 
  for ( Pointer &p : ptr )
  {
   if ( !isDataOk (p, size) )
-   printf ("error");
+   myprint ("error");
  }
 
  // f = fopen ("free.txt", "w");
@@ -97,16 +104,16 @@ void AllocReadWrite ()
  for ( Pointer &p : ptr )
  // for ( int i = 0; i < 20; i++ )
  {
-  // printf ("\ni=%d ptr=%d", j, ptr[i].get ());
-  // fprintf (f, "\ni=%d p.get=%d" /*ptr=%d"*/, j, /*p.get (),*/ ptr[i].get ());
+  // myprint ("\ni=%d ptr=%d", j, ptr[i].get ());
+  // fmyprint (f, "\ni=%d p.get=%d" /*ptr=%d"*/, j, /*p.get (),*/ ptr[i].get ());
   // j++;
   a.free (p);
  }
- // fprintf (f, "\n");
+ // fmyprint (f, "\n");
  // fclose (f);
 }
 
-//TEST(Allocator, AllocNoMem)
+// TEST (Allocator, AllocNoMem)
 void AllocNoMem ()
 {
  Allocator a (buf, sizeof (buf));
@@ -126,7 +133,7 @@ void AllocNoMem ()
  catch ( AllocError &e )
  {
   if ( e.getType () != AllocErrorType::NoMemory )
-   printf ("Error");
+   myprint ("Error");
  }
 
  for ( Pointer &p : ptr )
@@ -135,7 +142,7 @@ void AllocNoMem ()
  }
 }
 
-//TEST(Allocator, AllocReuse)
+// TEST (Allocator, AllocReuse)
 void AllocReuse ()
 {
  Allocator a (buf, sizeof (buf));
@@ -144,26 +151,26 @@ void AllocReuse ()
  int size = 135;
 
  if ( !fillUp (a, size, ptrs) )
-   printf ("Error");
+   myprint ("Error");
  a.free (ptrs[1]);
 
  if ( ptrs[1].get () != nullptr )
-  printf ("Error");
+  myprint ("Error");
  ptrs[1] = a.alloc (size);
 
  if ( ptrs[1].get () == nullptr )
-  printf ("Error");
+  myprint ("Error");
  writeTo (ptrs[1], size);
 
  for ( Pointer &p : ptrs )
  {
   if ( !isDataOk (p, size) )
-   printf ("Error");
+   myprint ("Error");
   a.free (p);
  }
 }
 
-//TEST(Allocator, DefragMove)
+// TEST (Allocator, DefragMove)
 void DefragMove ()
 {
  Allocator a (buf, sizeof (buf));
@@ -173,7 +180,7 @@ void DefragMove ()
  int size = 135;
 
  if ( !fillUp (a, size, ptrs) )
-   printf ("Error");
+   myprint ("Error");
  a.free (ptrs[1]);
  a.free (ptrs[10]);
  a.free (ptrs[15]);
@@ -187,7 +194,7 @@ void DefragMove ()
   auto r = initialPtrs.insert (p.get ());
   // Ensure inserted a new element.
   if ( !r.second )
-     printf ("Error");
+     myprint ("Error");
  }
 
  a.defrag ();
@@ -196,22 +203,22 @@ void DefragMove ()
  for ( Pointer &p : ptrs )
  {
   if (!isDataOk (p, size))
-     printf ("Error");
+     myprint ("Error");
   moved = (moved || initialPtrs.find (p.get ()) == initialPtrs.end ());
  }
 
  if ( !moved )
-   printf ("Error");
+   myprint ("Error");
 
  for ( Pointer &p : ptrs )
  {
   if (!isDataOk (p, size) )
-     printf ("Error");
+     myprint ("Error");
   a.free (p);
  }
 }
 
-//TEST(Allocator, DefragMoveTwice)
+// TEST (Allocator, DefragMoveTwice)
 void DefragMoveTwice ()
 {
  Allocator a (buf, sizeof (buf));
@@ -220,7 +227,7 @@ void DefragMoveTwice ()
  int size = 225;
 
  if ( !fillUp (a, size, ptrs) )
-   printf ("Error");
+   myprint ("Error");
 
  a.free (ptrs[1]);
  a.free (ptrs[10]);
@@ -240,13 +247,12 @@ void DefragMoveTwice ()
  for ( Pointer &p : ptrs )
  {
   if ( !isDataOk (p, size) )
-   printf ("Error");
+   myprint ("Error");
   a.free (p);
  }
 }
 
-
-//TEST(Allocator, DefragAvailable)
+// TEST (Allocator, DefragAvailable)
 void DefragAvailable ()
 {
  Allocator a (buf, sizeof (buf));
@@ -255,7 +261,7 @@ void DefragAvailable ()
  int size = 135;
 
  if (!fillUp (a, size, ptrs))
-   printf ("Error");
+   myprint ("Error");
 
  a.free (ptrs[1]);
  a.free (ptrs[10]);
@@ -281,12 +287,12 @@ void DefragAvailable ()
  for ( Pointer &p : ptrs )
  {
   if (!isDataOk (p, size) )
-     printf ("Error");
+     myprint ("Error");
   a.free (p);
  }
 }
 
-//TEST(Allocator, ReallocFromEmpty)
+// TEST (Allocator, ReallocFromEmpty)
 void ReallocFromEmpty ()
 {
  Allocator a (buf, sizeof (buf));
@@ -298,7 +304,7 @@ void ReallocFromEmpty ()
 
  a.realloc (p, size);
  if (p.get () == nullptr )
-  printf ("Error");
+  myprint ("Error");
 
  Pointer p2 = a.alloc (size);
 
@@ -307,18 +313,18 @@ void ReallocFromEmpty ()
  writeTo (p2, size);
 
  if (!isDataOk (p, size))
-   printf ("Error");
+   myprint ("Error");
  if (!isDataOk (p1, size))
-   printf ("Error");
+   myprint ("Error");
  if (!isDataOk (p2, size))
-   printf ("Error");
+   myprint ("Error");
 
  a.free (p);
  a.free (p1);
  a.free (p2);
 }
 
-//TEST(Allocator, ReallocGrowInplace)
+// TEST (Allocator, ReallocGrowInplace)
 void ReallocGrowInplace ()
 {
  Allocator a (buf, sizeof (buf));
@@ -331,24 +337,24 @@ void ReallocGrowInplace ()
  a.realloc (p, size * 2);
 
  if ( p.get () != ptr )
-   printf ("Error");
+   myprint ("Error");
  if (!isDataOk (p, size) )
-   printf ("Error");
+   myprint ("Error");
 
  Pointer p2 = a.alloc (size);
  writeTo (p, size * 2);
  writeTo (p2, size);
 
  if (!isDataOk (p, size * 2) )
-   printf ("Error");
+   myprint ("Error");
  if (!isDataOk (p2, size) )
-   printf ("Error");
+   myprint ("Error");
 
  a.free (p);
  a.free (p2);
 }
 
-//TEST(Allocator, ReallocShrink)
+// TEST (Allocator, ReallocShrink)
 void ReallocShrink ()
 {
  Allocator a (buf, sizeof (buf));
@@ -361,22 +367,22 @@ void ReallocShrink ()
  a.realloc (p, size / 2);
 
  if ( p.get () != ptr )
-   printf ("Error");
+   myprint ("Error");
 
  Pointer p2 = a.alloc (size);
  writeTo (p2, size);
 
  if ( !isDataOk (p, size / 2))
-   printf ("Error");
+   myprint ("Error");
 
  if( !isDataOk (p2, size))
-   printf ("Error");
+   myprint ("Error");
 
  a.free (p);
  a.free (p2);
 }
 
-//TEST(Allocator, ReallocGrow)
+// TEST (Allocator, ReallocGrow)
 void ReallocGrow ()
 {
  Allocator a (buf, sizeof (buf));
@@ -397,15 +403,14 @@ void ReallocGrow ()
  }
 
  if ( !isDataOk (p, size) )
-  printf ("Error");
+  myprint ("Error");
  writeTo (p, size * 2);
 
  if ( !isDataOk (p, size * 2))
-   printf ("Error");
+   myprint ("Error");
  if ( !isDataOk (p2, size))
-   printf ("Error");
+   myprint ("Error");
 
  a.free (p);
  a.free (p2);
 }
-
