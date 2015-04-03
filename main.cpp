@@ -20,8 +20,8 @@ int  main (int argc, char **argv)
  AllocNoMem ();
  AllocReuse ();
  DefragMove ();
- // DefragMoveTwice ();
- // DefragAvailable ();
+ DefragMoveTwice ();
+ DefragAvailable ();
  ReallocFromEmpty ();
  ReallocGrowInplace ();
  ReallocShrink ();
