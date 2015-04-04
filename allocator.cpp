@@ -4,10 +4,12 @@
  * +-------------+------------------------------------+
  * | EmptyHeader | Memory ... -->      <-- ... Blocks |
  * +-------------+------------------------------------+
- *                                   ^
+ *                                   ^  
  */
-FILE* log_file = fopen ("log", "a+");
- //-------------------------------------
+#ifdef DBG
+FILE* log_file = stdout; // fopen ("log", "a+");
+#endif 
+//-------------------------------------
           Allocator::Allocator (void *base, size_t size) :
                                     memory_ ((uchar_t*)base),
                                       size_ (size),
@@ -20,8 +22,8 @@ FILE* log_file = fopen ("log", "a+");
   first_block_ = (Block*) (memory_ + size_ - sizeof (Block));
 
   first_block_->size_ = 0;
-  first_block_->left_ = NULL;
-  first_block_->rght_ = NULL;
+  first_block_->prev_ = NULL;
+  first_block_->next_ = NULL;
   first_block_->index_ = 0;
   first_block_->pointer_ = NULL;
   //--------------------------
@@ -38,7 +40,7 @@ FILE* log_file = fopen ("log", "a+");
   if ( !block ) throw err_;
   //--------------------------
   Pointer pp (first_block_);
-  pp.block_ = block;
+  pp.block_       = block;
   pp.block_index_ = block->index_;
   //--------------------------
   return  pp;
@@ -47,31 +49,38 @@ FILE* log_file = fopen ("log", "a+");
  void     Allocator::realloc   (Pointer &p, size_t new_size)
  {
   Block *new_block = NULL, *block = p.Block ();
+
   if ( block )
   {
-   if ( (block->rght_ && block->rght_->pointer_ - (block->pointer_ + block->size_) >= new_size)
-       || (((uchar_t*) last_block_) - (block->pointer_ + block->size_) >= new_size) )
+   uchar_t  *ptr = (block->pointer_ + block->size_);
+
+   if ( ( block->next_ &&  (size_t) ( block->next_->pointer_ - ptr) >= new_size )
+     || (!block->next_ && ((size_t) ( (uchar_t*) last_block_ - ptr) >= new_size)) )
    {
     block->size_ = new_size;
     return;
    }
    else if ( (new_block = put_block (new_size)) )
    {
-    del_block (block);
-    p.block_       = new_block;
     p.block_index_ = new_block->index_;
-    p.first_       = first_block_;
-   }
-   else throw err_;
+    p.first_ = first_block_;
+
+    std::memcpy (new_block->pointer_, block->pointer_, block->size_);
+
+    del_block (block);
+    p.block_ = block;
+    return;
+   }   
   }
-  else
+  
+  if ( (new_block = put_block (new_size)) )
   {
-   if ( !(new_block = put_block (new_size)) )
-    throw err_;
    p.block_       = new_block;
    p.block_index_ = new_block->index_;
    p.first_       = first_block_;
+   return;
   }
+  throw err_;
  }
  //-------------------------------------
  void     Allocator::free      (Pointer &p)
@@ -87,8 +96,8 @@ FILE* log_file = fopen ("log", "a+");
  {
   Block *curr, *next;
 
-  curr = first_block_->rght_;
-  next =         curr->rght_;
+  curr = first_block_->next_;
+  next =         curr->next_;
 
   int i = 0;
   while ( next >= last_block_  )
@@ -103,19 +112,9 @@ FILE* log_file = fopen ("log", "a+");
 #ifdef DBG
    fprintf (log_file, "\ni=%d ptr=%d  sz=%u", i++, curr->pointer_ - memory_, curr->size_);
 #endif
+
    curr = next;
-   next = next->rght_;
+   next = next->next_;
   }
-#ifdef DBG
-  // Block *rr = (Block*) (memory_ + size_ - sizeof (Block));
-  // FILE *f = fopen ("log.txt", "w");
-  // for ( uint_t i = 0U; i < blocks_count_; ++i )
-  // { fprintf (f, "\ni=%d ptr=%d  lft=%d  sz=%u  sg=%u",
-  //           i, rr->pointer_, rr->leftptr_, rr->size_, rr->sign_);
-  //   --rr;
-  // }
-  // fprintf (f, "\n");
-  // fclose (f);
-#endif
  }
  //-------------------------------------
