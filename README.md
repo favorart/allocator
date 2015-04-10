@@ -1,4 +1,4 @@
 # Allocator + Pointer
-Technosphere.ail.ru 2015
+Technosphere.mail.ru 2015
 
-Memory Allocator class with defragmentation method and the simplest Smart Pointer class.
+The Memory Allocator class with the method of defragmentation and the simplest Smart Pointer class.
