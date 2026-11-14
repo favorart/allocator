@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "allocator.h"
 /*                                   v
  * +-------------+------------------------------------+
@@ -34,7 +33,7 @@ const size_t  kMaxRequest = UINT32_MAX / 2;
   if ( head < data || head - data < kAlign )
    throw err_;
 
-  memory_ = (uchar_t*) data;
+  memory_ = (unsigned char*) data;
   size_   = (size_t) (head + sizeof (Block) - data);
   std::memset (memory_, 0, size_);
   //--------------------------
@@ -83,10 +82,10 @@ const size_t  kMaxRequest = UINT32_MAX / 2;
   //--------------------------
   size_t  size = round_up (new_size);
   /* in place: up to the next block or up to the descriptors */
-  uchar_t  *limit = (block->next_) ? block->next_->pointer_ : (uchar_t*) last_block_;
+  unsigned char  *limit = (block->next_) ? block->next_->pointer_ : (unsigned char*) last_block_;
   if ( (size_t) (limit - block->pointer_) >= size )
   {
-   block->size_ = (uint_t) size;
+   block->size_ = (std::uint32_t) size;
    return;
   }
   //--------------------------
@@ -115,7 +114,7 @@ const size_t  kMaxRequest = UINT32_MAX / 2;
  void     Allocator::defrag    ()
  {
   /* The list is sorted by data address: slide every block down */
-  uchar_t  *end = memory_;
+  unsigned char  *end = memory_;
   for ( Block *curr = first_block_->next_; curr; curr = curr->next_ )
   {
    if ( curr->pointer_ != end )

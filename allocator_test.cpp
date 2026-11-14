@@ -1,4 +1,3 @@
-#include "stdafx.h"
 #include "allocator.h"
 
 #include <cstdio>

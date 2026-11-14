@@ -1,6 +1,8 @@
 ﻿#pragma once
 
-#include "stdafx.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -64,9 +66,9 @@ class Allocator
  //-----------------------------------------
  struct Block
  { //---data----------
-   uchar_t  *pointer_;
-   uint_t       size_;
-   uint_t      index_;
+   unsigned char  *pointer_;
+   std::uint32_t       size_;
+   std::uint32_t      index_;
    //---list----------
    Block       *prev_;
    Block       *next_;
@@ -76,21 +78,21 @@ class Allocator
  static const size_t  kAlign = alignof (std::max_align_t);
  //-----------------------------------------
  AllocError        err_; /* to avoid the call new */
- uchar_t       *memory_; /* available memory      */
+ unsigned char       *memory_; /* available memory      */
  size_t           size_; /* size of memory        */
  //-----------------------------------------      */
- uint_t   blocks_count_; /* quantity of blocks    */
+ std::uint32_t   blocks_count_; /* quantity of blocks    */
  Block    *first_block_; /* list head, never moves, highest descriptor */
  Block     *last_block_; /* lowest descriptor     */
- uint_t      max_index_; /* to detect collisions and make corrections of smart pointers */
+ std::uint32_t      max_index_; /* to detect collisions and make corrections of smart pointers */
  //-----------------------------------------
  static size_t  round_up (size_t size)
  { return (size + kAlign - 1) / kAlign * kAlign; }
  /* Free bytes between the end of the data and the descriptors */
- size_t  tail_room (const uchar_t *data_end) const
- { return (size_t) ((const uchar_t*) last_block_ - data_end); }
+ size_t  tail_room (const unsigned char *data_end) const
+ { return (size_t) ((const unsigned char*) last_block_ - data_end); }
  /* End of the data of the block, or of the arena head for the list head */
- uchar_t*  end_of (const Block *block) const
+ unsigned char*  end_of (const Block *block) const
  { return (block == first_block_) ? memory_ : (block->pointer_ + block->size_); }
  /* The last block of the list: the one with the highest data address */
  Block*  tail_block () const
@@ -101,7 +103,7 @@ class Allocator
   return curr;
  }
  //-----------------------------------------
- Block*  new_block (uint_t size, uchar_t *ptr, Block *prev, Block *next)
+ Block*  new_block (std::uint32_t size, unsigned char *ptr, Block *prev, Block *next)
  {
   Block* block = --last_block_;
   /* Block always appears in the place of last one */
@@ -134,14 +136,14 @@ class Allocator
   /* Realization of first_fit (the gap before the first block counts too) */
   for ( Block *curr = first_block_; curr->next_; curr = curr->next_ )
   {
-   uchar_t  *ptr = end_of (curr);
+   unsigned char  *ptr = end_of (curr);
    if ( (size_t) (curr->next_->pointer_ - ptr) >= size )
-    return new_block ((uint_t) size, ptr, curr, curr->next_);
+    return new_block ((std::uint32_t) size, ptr, curr, curr->next_);
   }
 
   /* Checking free tail */
   if ( tail_room (end_of (tail)) - sizeof (Block) >= size )
-   return new_block ((uint_t) size, end_of (tail), tail, NULL);
+   return new_block ((std::uint32_t) size, end_of (tail), tail, NULL);
 
   return NULL;
  }
@@ -205,7 +207,7 @@ class Pointer
 protected:
  mutable Allocator::Block  *block_;
  const   Allocator         *owner_;
- uint_t               block_index_;
+ std::uint32_t               block_index_;
  //-----------------------------------------
  /* Correct of smart pointer's value:
   * a descriptor can only move towards the list head,

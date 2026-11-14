@@ -12,7 +12,7 @@ SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-r
 
 BUILD := build
 LIB   := allocator.cpp
-HDRS  := allocator.h stdafx.h
+HDRS  := allocator.h
 
 .PHONY: all test sanitize demo clean
 all: $(BUILD)/demo $(BUILD)/allocator_test
