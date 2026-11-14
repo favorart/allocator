@@ -1,251 +1,228 @@
 ﻿#pragma once
 
+/**
+ * @file allocator.h
+ * @brief A memory allocator over a fixed buffer with defragmentation,
+ *        and a smart pointer that survives block moves.
+ *
+ * Technosphere (Mail.Ru Group), course "Multithreaded programming in C++".
+ * Kirill Golikov, 04.04.2015. Reviewed in 2026.
+ *
+ * The task: an allocator and a smart pointer class with memory
+ * defragmentation, WITHOUT ANY EXTRA MEMORY.
+ *
+ * A real doubly linked list stored inside the managed memory; its nodes
+ * are kept at the end of the buffer as a dense array without holes:
+ *   - add and remove a node: O(1);
+ *   - defragmentation: O(n * k);
+ *   - reallocation / growth: O(n * l);
+ * where n is the number of blocks, k is the average block size in bytes,
+ * l is the size of the given block.
+ *
+ * A smart pointer finds a node that moved by "open addressing": it scans
+ * from the slot it saw last towards the list head, O(n).
+ *
+ * Layout of the managed buffer:
+ * @code
+ * +--------------------------------------------------------------+
+ * | data -->              free              <-- descriptors | head |
+ * +--------------------------------------------------------------+
+ * @endcode
+ */
+
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <stdexcept>
 #include <string>
 
-/*
- * Дата:  04.04.2015
- * Автор: Голиков Кирилл
- *
- * Техносфера mail.ru.
- * Курс: Многопоточное программрование на C++
- *
- * Задание:
- * Реализация аллокатора и класса умного указателя
- * с поддержкой дефрагментации памяти
- * БЕЗ ДОПОЛНИТЕЛЬНОЙ ПАМЯТИ
- *
- * Честная реализация двунаправленного списка в памяти,
- * хранение элементов списка в памяти с конца без дырок:
- *     + добавление и удаление (сложность O(1))
- *     + дефрагментация (сложность O(n*k))
- *     + перевыделение/расширение (сложность O(n*l))
- * , где
- *     n - количество блоков памяти
- *     k - средняя длина блока памяти в байтах
- *     l - длинна данного куска памяти
- *
- * Коррекция промахов умного указателя при изменении
- * положения элемента списка, содержащего иноформацию
- * о блоке памяти методом "ОТКРЫТОЙ АДРЕСАЦИИ" (сложность O(n))
- *
- * (English overview, layout diagram and the 2026 review notes: README.md)
- */
+/** @brief The kind of an allocation error. */
+enum AllocErrorType
+{
+    InvalidFree, ///< Reserved: freeing a pointer that is not allocated.
+    NoMemory     ///< Not enough memory, or an invalid size or arena.
+};
 
-class Allocator;
-enum  AllocErrorType
-{ InvalidFree, NoMemory };
+/** @brief The exception thrown by Allocator. */
 class AllocError : public std::runtime_error
 {
-private:
- AllocErrorType type_;
-
 public:
- AllocError (AllocErrorType type, std::string message) :
-  runtime_error (message),
-  type_ (type)
- {}
+    /**
+     * @brief Creates an error.
+     * @param type    The kind of the error.
+     * @param message The text returned by what().
+     */
+    AllocError(AllocErrorType type, const std::string& message)
+        : std::runtime_error(message), type_(type)
+    {
+    }
 
- AllocErrorType  getType () const
- { return type_; }
+    /** @return The kind of the error. */
+    AllocErrorType getType() const { return type_; }
+
+private:
+    AllocErrorType type_;
 };
-
-// #define DBG
-#ifdef  DBG
-/* Debug info */
-#include <cstdio>
-extern  FILE  *log_file;
-#endif
 
 class Pointer;
+
+/**
+ * @brief Allocates blocks inside a buffer given by the caller.
+ *
+ * All bookkeeping lives inside the buffer. Blocks are handed out as
+ * Pointer objects, because defrag() and realloc() may move them.
+ * Not thread-safe.
+ */
 class Allocator
 {
- //-----------------------------------------
- struct Block
- { //---data----------
-   unsigned char  *pointer_;
-   std::uint32_t       size_;
-   std::uint32_t      index_;
-   //---list----------
-   Block       *prev_;
-   Block       *next_;
-   //-----------------
- };
- /* Every user block starts at this alignment (like malloc) */
- static const size_t  kAlign = alignof (std::max_align_t);
- //-----------------------------------------
- AllocError        err_; /* to avoid the call new */
- unsigned char       *memory_; /* available memory      */
- size_t           size_; /* size of memory        */
- //-----------------------------------------      */
- std::uint32_t   blocks_count_; /* quantity of blocks    */
- Block    *first_block_; /* list head, never moves, highest descriptor */
- Block     *last_block_; /* lowest descriptor     */
- std::uint32_t      max_index_; /* to detect collisions and make corrections of smart pointers */
- //-----------------------------------------
- static size_t  round_up (size_t size)
- { return (size + kAlign - 1) / kAlign * kAlign; }
- /* Free bytes between the end of the data and the descriptors */
- size_t  tail_room (const unsigned char *data_end) const
- { return (size_t) ((const unsigned char*) last_block_ - data_end); }
- /* End of the data of the block, or of the arena head for the list head */
- unsigned char*  end_of (const Block *block) const
- { return (block == first_block_) ? memory_ : (block->pointer_ + block->size_); }
- /* The last block of the list: the one with the highest data address */
- Block*  tail_block () const
- {
-  Block *curr = first_block_;
-  while ( curr->next_ )
-   curr = curr->next_;
-  return curr;
- }
- //-----------------------------------------
- Block*  new_block (std::uint32_t size, unsigned char *ptr, Block *prev, Block *next)
- {
-  Block* block = --last_block_;
-  /* Block always appears in the place of last one */
-
-  /* Fill the Block structure */
-  block->pointer_ = ptr;
-  /* Indices only grow: a smart pointer finds its block by the index,
-   * so two live blocks must never share one (0 is the list head).  */
-  if ( ++max_index_ == 0 )
-   ++max_index_;
-  block->index_   = max_index_;
-  block->size_    = size;
-  block->prev_    = prev;
-  block->next_    = next;
-
-  if ( prev ) prev->next_ = block;
-  if ( next ) next->prev_ = block;
-
-  ++blocks_count_;
-  return block;
- }
- /* size must be already rounded up */
- Block*  put_block (size_t size)
- {
-  Block *tail = tail_block ();
-  /* Any new block needs room for one more descriptor */
-  if ( tail_room (end_of (tail)) < sizeof (Block) )
-   return NULL;
-
-  /* Realization of first_fit (the gap before the first block counts too) */
-  for ( Block *curr = first_block_; curr->next_; curr = curr->next_ )
-  {
-   unsigned char  *ptr = end_of (curr);
-   if ( (size_t) (curr->next_->pointer_ - ptr) >= size )
-    return new_block ((std::uint32_t) size, ptr, curr, curr->next_);
-  }
-
-  /* Checking free tail */
-  if ( tail_room (end_of (tail)) - sizeof (Block) >= size )
-   return new_block ((std::uint32_t) size, end_of (tail), tail, NULL);
-
-  return NULL;
- }
- int     del_block (Block *block)
- {
-  if ( !block || block == first_block_ )
-   return 1;
-
-  /* prick the element out of list */
-  if ( block->next_ )
-   block->next_->prev_ = block->prev_;
-  if ( block->prev_ )
-   block->prev_->next_ = block->next_;
-
-  /* if it is not a last element:
-   * replace the last one into given,
-   * to keep the list without holes in memory
-   * (descriptors only move up, towards first_block_)
-   */
-  if ( block != last_block_ )
-  {
-   *block = *last_block_;
-
-   if ( block->prev_ )
-    block->prev_->next_ = block;
-   if ( block->next_ )
-    block->next_->prev_ = block;
-  }
-  /* remove the last element */
-  std::memset (static_cast<void*> (last_block_), 0, sizeof (Block));
-  ++last_block_;
-  --blocks_count_;
-
-#ifdef  DBG
-  {
-   /* Debug info */
-   int i = 0;
-   std::fprintf (log_file, "\nbcount=%u\n", blocks_count_);
-   for ( Block *curr = first_block_; curr >= last_block_; --curr )
-    std::fprintf (log_file, "%02d  ptr=%p  sz=%04u  inx=%02u\n",
-                  ++i, (void*) curr->pointer_, curr->size_, curr->index_);
-  }
-#endif
-
-   return 0;
- }
- //-----------------------------------------
 public:
- /* Manages [base, base + size). Throws AllocError(NoMemory) if it is too small. */
- explicit  Allocator (void  *base, size_t size);
- Pointer       alloc (size_t size);                 // throw (AllocError);
- void        realloc (Pointer &p, size_t new_size); // throw (AllocError); 0 means free
- void           free (Pointer &p);
- void         defrag ();
- //-----------------------------------------
- friend class Pointer;
+    /**
+     * @brief Takes `[base, base + size)` under management and clears it.
+     * @param base The start of the buffer; it does not have to be aligned.
+     * @param size The size of the buffer in bytes.
+     * @throws AllocError (NoMemory) if `base` is null or the buffer is too
+     *         small for the list head and one aligned data unit.
+     */
+    explicit Allocator(void* base, std::size_t size);
+
+    /**
+     * @brief Allocates a block, first fit.
+     * @param size The size in bytes, 1 .. 2 GiB. Rounded up to
+     *             `alignof(std::max_align_t)`.
+     * @return A pointer to the new block; its address is aligned
+     *         to `alignof(std::max_align_t)`.
+     * @throws AllocError (NoMemory) if `size` is 0 or too large,
+     *         or there is no free space for it.
+     */
+    Pointer alloc(std::size_t size);
+
+    /**
+     * @brief Changes the size of a block, moving it if needed.
+     *
+     * Grows or shrinks in place when the space up to the next block allows
+     * it; otherwise allocates a new block, copies the data and frees the old
+     * one. Then only `p` is valid: its copies resolve to `nullptr`.
+     *
+     * @param p        The block. If it is empty, works like alloc().
+     * @param new_size The new size in bytes. 0 works like free().
+     * @throws AllocError (NoMemory) if there is no space; `p` and its
+     *         data stay unchanged.
+     */
+    void realloc(Pointer& p, std::size_t new_size);
+
+    /**
+     * @brief Frees a block and resets `p`.
+     *
+     * An empty or already freed pointer (or its copy) is ignored.
+     * @param p The block to free.
+     */
+    void free(Pointer& p);
+
+    /**
+     * @brief Moves all blocks to the start of the buffer, in address order,
+     *        so that all free space becomes one piece.
+     *
+     * Pointer objects and their copies stay valid; raw addresses
+     * from Pointer::get() do not.
+     */
+    void defrag();
+
+private:
+    friend class Pointer;
+
+    /** A block descriptor: a node of the address-sorted list. */
+    struct Block
+    {
+        unsigned char* pointer_; ///< Data of the block.
+        std::uint32_t size_;     ///< Size of the data, rounded up.
+        std::uint32_t index_;    ///< Unique id; 0 is the list head.
+        Block* prev_;
+        Block* next_;
+    };
+
+    /** Every user block starts at this alignment, like malloc(). */
+    static constexpr std::size_t kAlign = alignof(std::max_align_t);
+
+    static std::size_t round_up(std::size_t size) { return (size + kAlign - 1) / kAlign * kAlign; }
+
+    /** Free bytes between the end of the data and the descriptors. */
+    std::size_t tail_room(const unsigned char* data_end) const
+    {
+        return static_cast<std::size_t>(reinterpret_cast<const unsigned char*>(last_block_) -
+                                        data_end);
+    }
+
+    /** End of the block's data; for the list head, the start of the buffer. */
+    unsigned char* end_of(const Block* block) const
+    {
+        return (block == first_block_) ? memory_ : block->pointer_ + block->size_;
+    }
+
+    Block* tail_block() const;
+    Block* new_block(std::uint32_t size, unsigned char* ptr, Block* prev, Block* next);
+    Block* put_block(std::size_t size);
+    void del_block(Block* block);
+
+    AllocError err_;             ///< Prepared in advance, to throw without building a message.
+    unsigned char* memory_;      ///< Start of the data area (aligned).
+    std::size_t size_;           ///< Size of the managed area.
+    std::uint32_t blocks_count_; ///< Number of descriptors, the list head included.
+    Block* first_block_;         ///< List head: the highest descriptor, never moves.
+    Block* last_block_;          ///< The lowest descriptor.
+    std::uint32_t max_index_;    ///< The last index given out; indices only grow.
 };
 
+/**
+ * @brief A handle to a block of an Allocator.
+ *
+ * Copyable. It remembers the descriptor slot it saw last and the block's
+ * index. Descriptors only move towards the list head, so get() finds a
+ * moved block by scanning upward from that slot.
+ */
 class Pointer
 {
-protected:
- mutable Allocator::Block  *block_;
- const   Allocator         *owner_;
- std::uint32_t               block_index_;
- //-----------------------------------------
- /* Correct of smart pointer's value:
-  * a descriptor can only move towards the list head,
-  * so search upwards for the remembered index.
-  */
- inline Allocator::Block*  Block () const
- {
-  if ( !block_ || !owner_ )
-   return NULL;
-
-  /* Slots below last_block_ are free and may already hold user data */
-  if ( block_ < owner_->last_block_ )
-   block_ = owner_->last_block_;
-
-  while ( block_ != owner_->first_block_ )
-  {
-#ifdef  DBG
-   /* Debug info */
-   std::fprintf (log_file, "bl: inx=%02u  %p\n", block_->index_, (void*) block_);
-#endif
-   if ( block_->index_ == block_index_ )
-    return block_;
-   ++block_;
-  }
-
-  block_ = NULL;
-  return NULL;
- }
- //-----------------------------------------
 public:
- Pointer ()                             : block_ (NULL), owner_ (NULL ), block_index_ (0) {}
- explicit Pointer (const Allocator *owner) : block_ (NULL), owner_ (owner), block_index_ (0) {}
- //-----------------------------------------
- void*  get () const
- {
-  block_ = Block ();
-  return (block_) ? block_->pointer_ : NULL;
- }
- //-----------------------------------------
- friend class Allocator;
+    /** @brief Creates an empty pointer: get() returns `nullptr`. */
+    Pointer() = default;
+
+    /**
+     * @brief Returns the current address of the block.
+     *
+     * The address is valid until the next Allocator::realloc() or
+     * Allocator::defrag().
+     * @return The address, or `nullptr` if the pointer is empty
+     *         or the block was freed.
+     */
+    void* get() const
+    {
+        block_ = find();
+        return block_ ? block_->pointer_ : nullptr;
+    }
+
+private:
+    friend class Allocator;
+
+    explicit Pointer(const Allocator* owner) : owner_(owner) {}
+
+    Allocator::Block* find() const;
+
+    mutable Allocator::Block* block_ = nullptr; ///< The slot seen last.
+    const Allocator* owner_ = nullptr;
+    std::uint32_t block_index_ = 0;
 };
+
+inline Allocator::Block* Pointer::find() const
+{
+    if (!block_ || !owner_)
+        return nullptr;
+
+    // slots below the descriptor array are free and may already hold user data
+    if (block_ < owner_->last_block_)
+        block_ = owner_->last_block_;
+
+    for (; block_ != owner_->first_block_; ++block_)
+        if (block_->index_ == block_index_)
+            return block_;
+
+    block_ = nullptr;
+    return nullptr;
+}
