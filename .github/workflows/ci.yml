@@ -48,3 +48,17 @@ jobs:
       run: ctest --test-dir build -C Release --output-on-failure
     - name: benchmark
       run: build/Release/allocator_bench
+
+  macos:
+    name: macos (clang)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: configure
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_BENCH=ON
+    - name: build
+      run: cmake --build build
+    - name: tests
+      run: ctest --test-dir build --output-on-failure
+    - name: benchmark
+      run: build/allocator_bench

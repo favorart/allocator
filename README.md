@@ -102,8 +102,8 @@ written for GoogleTest), regression tests for every bug below, and a
 randomized stress test that checks every live block byte by byte against a
 model after each operation.
 
-CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan)
-and with MSVC (`/W4 /WX`) on Windows.
+CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
+with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS.
 
 ## Performance
 
