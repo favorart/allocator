@@ -20,7 +20,7 @@ jobs:
     env:
       CXX: ${{ matrix.cxx }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: build (-Wall -Wextra -Wpedantic -Werror)
       run: make all
     - name: tests
@@ -37,7 +37,7 @@ jobs:
     name: windows (msvc)
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: configure
       run: cmake -S . -B build
     - name: build (/W4 /WX)
