@@ -594,6 +594,300 @@ TEST (Regression, CachedSlotReusedByData)
  CHECK (isDataOk (X, 64));
 }
 
+//=========================================
+// Unit tests: the whole public API
+//=========================================
+
+//---- Allocator::Allocator ---------------
+TEST (Ctor, RejectsBadArenas)
+{
+ CHECK_THROWS (Allocator a (nullptr, 1024), NoMemory);
+ CHECK_THROWS (Allocator a (buf, 0), NoMemory);
+ CHECK_THROWS (Allocator a (buf, 16), NoMemory);  // smaller than a descriptor
+ CHECK_THROWS (Allocator a (buf + 16, SIZE_MAX), NoMemory); // base + size wraps around
+}
+
+TEST (Ctor, SmallestUsableArena)
+{
+ // smallest arena: one aligned data unit plus the list head
+ size_t n = 64;
+ for ( ; n < 256; ++n )
+  try { Allocator a (buf, n); break; } catch ( AllocError & ) {}
+ Allocator a (buf, n);
+ CHECK_THROWS (a.alloc (1), NoMemory); // no room for the block's own descriptor
+}
+
+//---- Allocator::alloc -------------------
+TEST (Alloc, ReturnsAlignedDistinctBlocks)
+{
+ Allocator a (buf, sizeof (buf));
+ set<void*> seen;
+ for ( size_t size = 1; size <= 300; size += 13 )
+ {
+  Pointer p = a.alloc (size);
+  void *v = p.get ();
+  CHECK (v != nullptr);
+  CHECK (reinterpret_cast<uintptr_t> (v) % alignof (std::max_align_t) == 0);
+  CHECK (seen.insert (v).second);
+  CHECK (isValidMemory (p, size));
+ }
+}
+
+TEST (Alloc, BlocksDoNotOverlap)
+{
+ Allocator a (buf, sizeof (buf));
+ vector<Pointer> ptrs;
+ vector<size_t>  sizes;
+ for ( size_t i = 0; i < 50; ++i )
+ {
+  sizes.push_back (1 + (i * 37) % 200);
+  ptrs.push_back (a.alloc (sizes.back ()));
+  memset (ptrs.back ().get (), static_cast<int> (i), sizes.back ());
+ }
+ for ( size_t i = 0; i < ptrs.size (); ++i )
+ {
+  unsigned char *v = static_cast<unsigned char*> (ptrs[i].get ());
+  for ( size_t j = 0; j < sizes[i]; ++j )
+   if ( v[j] != i ) { CHECK (!"blocks overlap"); return; }
+ }
+}
+
+TEST (Alloc, RejectsZeroAndHugeSizes)
+{
+ Allocator a (buf, sizeof (buf));
+ CHECK_THROWS (a.alloc (0), NoMemory);
+ CHECK_THROWS (a.alloc (sizeof (buf)), NoMemory);
+ CHECK_THROWS (a.alloc (SIZE_MAX), NoMemory);
+ CHECK_THROWS (a.alloc (SIZE_MAX - 8), NoMemory);  // must not wrap when rounded up
+ // a failed alloc leaves the allocator usable
+ Pointer p = a.alloc (100);
+ CHECK (p.get () != nullptr);
+}
+
+TEST (Alloc, FirstFitReusesTheFirstGap)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer p0 = a.alloc (64), p1 = a.alloc (64), p2 = a.alloc (64), p3 = a.alloc (64);
+ void *first = p1.get (), *second = p3.get ();
+ a.free (p1);
+ a.free (p3);
+ Pointer q = a.alloc (32);
+ CHECK (q.get () == first);
+ Pointer r = a.alloc (64);   // the rest of the first gap is too small
+ CHECK (r.get () == second);
+ (void) p0; (void) p2;
+}
+
+TEST (Alloc, FullCapacityAfterFreeingEverything)
+{
+ Allocator a (buf, 4096);
+ vector<Pointer> first, second;
+ CHECK (fillUp (a, 48, first));
+ for ( Pointer &p : first )
+  a.free (p);
+ CHECK (fillUp (a, 48, second));
+ CHECK (first.size () == second.size ());
+}
+
+//---- Allocator::free --------------------
+TEST (Free, EmptyAndRepeatedFreeAreNoOps)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer empty;
+ a.free (empty);
+ CHECK (empty.get () == nullptr);
+
+ Pointer p = a.alloc (64), keep = a.alloc (64);
+ writeTo (keep, 64);
+ a.free (p);
+ a.free (p);
+ CHECK (p.get () == nullptr);
+ CHECK (isDataOk (keep, 64));
+}
+
+TEST (Free, StaleCopyFreeDoesNotTouchOthers)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer p = a.alloc (64);
+ Pointer copy = p;
+ a.free (p);
+ Pointer other = a.alloc (64);
+ writeTo (other, 64);
+ a.free (copy);              // stale: must not free `other`
+ CHECK (other.get () != nullptr);
+ CHECK (isDataOk (other, 64));
+}
+
+TEST (Free, PointersSurviveDescriptorMoves)
+{
+ // free() moves the lowest descriptor into the hole:
+ // every other pointer (and its copies) must still resolve
+ Allocator a (buf, sizeof (buf));
+ vector<Pointer> ptrs;
+ for ( int i = 0; i < 20; ++i )
+ {
+  ptrs.push_back (a.alloc (40));
+  writeTo (ptrs.back (), 40);
+ }
+ vector<Pointer> copies (ptrs);
+ for ( int i = 0; i < 20; i += 2 )
+  a.free (ptrs[i]);
+ for ( int i = 1; i < 20; i += 2 )
+ {
+  CHECK (ptrs[i].get () == copies[i].get ());
+  CHECK (isDataOk (copies[i], 40));
+ }
+ for ( int i = 0; i < 20; i += 2 )
+  CHECK (copies[i].get () == nullptr);
+}
+
+//---- Allocator::realloc -----------------
+TEST (Realloc, EmptyPointerAndZero)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer p;
+ a.realloc (p, 0);           // empty + 0: nothing happens
+ CHECK (p.get () == nullptr);
+ a.realloc (p, 50);          // empty: like alloc
+ CHECK (p.get () != nullptr);
+ a.realloc (p, 0);           // 0: like free
+ CHECK (p.get () == nullptr);
+}
+
+TEST (Realloc, MoveKeepsDataAndFreesOldPlace)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer p = a.alloc (64), wall = a.alloc (64);
+ writeTo (p, 64);
+ void *old = p.get ();
+ Pointer copy = p;
+
+ a.realloc (p, 640);
+ CHECK (p.get () != old);
+ CHECK (isDataOk (p, 64));
+ CHECK (copy.get () == nullptr);  // copies do not follow a moving realloc
+
+ Pointer reuse = a.alloc (64);
+ CHECK (reuse.get () == old);
+ (void) wall;
+}
+
+TEST (Realloc, FailureKeepsTheBlock)
+{
+ Allocator a (buf, 1024);
+ Pointer p = a.alloc (128), wall = a.alloc (128);
+ writeTo (p, 128);
+ void *old = p.get ();
+ CHECK_THROWS (a.realloc (p, 4096), NoMemory);
+ CHECK_THROWS (a.realloc (p, SIZE_MAX), NoMemory);
+ CHECK (p.get () == old);
+ CHECK (isDataOk (p, 128));
+ (void) wall;
+}
+
+TEST (Realloc, GrowAtTheTailInPlace)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer p = a.alloc (64);
+ writeTo (p, 64);
+ void *old = p.get ();
+ a.realloc (p, 30000);
+ CHECK (p.get () == old);
+ CHECK (isDataOk (p, 64));
+ writeTo (p, 30000);
+ CHECK (isDataOk (p, 30000));
+}
+
+//---- Allocator::defrag ------------------
+TEST (Defrag, CompactsInAddressOrder)
+{
+ Allocator a (buf, sizeof (buf));
+ vector<Pointer> ptrs;
+ for ( int i = 0; i < 10; ++i )
+ {
+  ptrs.push_back (a.alloc (48));
+  writeTo (ptrs.back (), 48);
+ }
+ for ( int i = 0; i < 10; i += 3 )
+  a.free (ptrs[i]);
+ a.defrag ();
+
+ char *prev = nullptr;
+ for ( int i = 0; i < 10; ++i )
+ {
+  if ( i % 3 == 0 ) continue;
+  char *v = static_cast<char*> (ptrs[i].get ());
+  CHECK (isDataOk (ptrs[i], 48));
+  if ( prev ) CHECK (v == prev + 48);  // 48 is already aligned: no gaps
+  prev = v;
+ }
+}
+
+TEST (Defrag, MakesAllFreeSpaceContiguous)
+{
+ Allocator a (buf, 4096);
+ vector<Pointer> ptrs;
+ CHECK (fillUp (a, 64, ptrs));
+ size_t freed = 0;
+ for ( size_t i = 0; i < ptrs.size (); i += 2, freed += 64 )
+  a.free (ptrs[i]);
+ CHECK_THROWS (a.alloc (freed), NoMemory);  // fragmented
+ a.defrag ();
+ Pointer big = a.alloc (freed);
+ CHECK (big.get () != nullptr);
+ for ( size_t i = 1; i < ptrs.size (); i += 2 )
+  CHECK (isDataOk (ptrs[i], 64));
+}
+
+TEST (Defrag, IdempotentAndCopiesFollow)
+{
+ Allocator a (buf, sizeof (buf));
+ Pointer p = a.alloc (100), q = a.alloc (100);
+ writeTo (q, 100);
+ Pointer copy = q;
+ a.free (p);
+ a.defrag ();
+ void *once = q.get ();
+ a.defrag ();
+ CHECK (q.get () == once);
+ CHECK (copy.get () == once);
+ CHECK (isDataOk (copy, 100));
+}
+
+//---- Pointer -----------------------------
+TEST (Pointer, DefaultIsNull)
+{
+ Pointer p;
+ CHECK (p.get () == nullptr);
+ Pointer copy = p;
+ CHECK (copy.get () == nullptr);
+}
+
+TEST (Pointer, TwoAllocatorsAreIndependent)
+{
+ Allocator a (buf, 4096), b (buf + 8192, 4096);
+ Pointer pa = a.alloc (64), pb = b.alloc (64);
+ writeTo (pa, 64);
+ writeTo (pb, 64);
+ CHECK (static_cast<char*> (pa.get ()) <  buf + 4096);
+ CHECK (static_cast<char*> (pb.get ()) >= buf + 8192);
+ a.free (pa);
+ CHECK (pb.get () != nullptr);
+ CHECK (isDataOk (pb, 64));
+}
+
+//---- AllocError --------------------------
+TEST (AllocError, TypeAndMessage)
+{
+ AllocError e (InvalidFree, "bad free");
+ CHECK (e.getType () == InvalidFree);
+ CHECK (string (e.what ()) == "bad free");
+
+ Allocator a (buf, 1024);
+ try { a.alloc (0); CHECK (!"no throw"); }
+ catch ( const std::runtime_error &re ) { CHECK (re.what () != nullptr); }
+}
+
 // Random alloc / free / realloc / defrag against a byte-exact model.
 TEST (Stress, RandomOpsAgainstModel)
 {

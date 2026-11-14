@@ -112,10 +112,13 @@ and with MSVC (`/W4 /WX`) on Windows.
   `defrag()`; keep the `Pointer`, not the raw address.
 - `get()` costs O(blocks) in the worst case after many frees; it re-caches the
   slot, so repeated calls are O(1).
+- Copies of a `Pointer` follow `free()` and `defrag()` moves, but not a
+  `realloc()` that moves the block: after it only the `Pointer` passed to
+  `realloc()` is valid, the copies resolve to `nullptr`.
 - Blocks are raw bytes: no constructors or destructors are run.
 - Block indices are 32-bit; after 2³² allocations they wrap around.
 - A single request is limited to 2 GiB; every block is rounded up to
-  `alignof(std::max_align_t)` (usually 16 bytes); one descriptor takes 32 bytes
+  `alignof(std::max_align_t)` (16 bytes with GCC/Clang on x86-64, 8 with MSVC); one descriptor takes 32 bytes
   on 64-bit platforms.
 - The `Pointer` must be used with the allocator that created it.
 
