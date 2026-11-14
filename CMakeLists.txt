@@ -17,13 +17,13 @@ else()
   endif()
 endif()
 
-add_library(allocator STATIC allocator.cpp)
-target_include_directories(allocator PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(allocator STATIC src/allocator.cpp)
+target_include_directories(allocator PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_executable(demo main.cpp)
+add_executable(demo examples/demo.cpp)
 target_link_libraries(demo PRIVATE allocator)
 
 enable_testing()
-add_executable(allocator_test allocator_test.cpp)
+add_executable(allocator_test test/allocator_test.cpp)
 target_link_libraries(allocator_test PRIVATE allocator)
 add_test(NAME allocator_test COMMAND allocator_test)

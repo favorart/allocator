@@ -11,8 +11,9 @@ CXXFLAGS ?= -O2 -g
 SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
 
 BUILD := build
-LIB   := allocator.cpp
-HDRS  := allocator.h
+LIB   := src/allocator.cpp
+HDRS  := include/allocator.h
+INC   := -Iinclude
 
 .PHONY: all test sanitize demo clean
 all: $(BUILD)/demo $(BUILD)/allocator_test
@@ -20,14 +21,14 @@ all: $(BUILD)/demo $(BUILD)/allocator_test
 $(BUILD):
 	mkdir -p $@
 
-$(BUILD)/demo: main.cpp $(LIB) $(HDRS) | $(BUILD)
-	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) main.cpp $(LIB) -o $@
+$(BUILD)/demo: examples/demo.cpp $(LIB) $(HDRS) | $(BUILD)
+	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) examples/demo.cpp $(LIB) -o $@
 
-$(BUILD)/allocator_test: allocator_test.cpp $(LIB) $(HDRS) | $(BUILD)
-	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) allocator_test.cpp $(LIB) -o $@
+$(BUILD)/allocator_test: test/allocator_test.cpp $(LIB) $(HDRS) | $(BUILD)
+	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) test/allocator_test.cpp $(LIB) -o $@
 
-$(BUILD)/allocator_test_san: allocator_test.cpp $(LIB) $(HDRS) | $(BUILD)
-	$(CXX) $(CXXSTD) $(WARN) -O1 -g $(SANITIZE) allocator_test.cpp $(LIB) -o $@
+$(BUILD)/allocator_test_san: test/allocator_test.cpp $(LIB) $(HDRS) | $(BUILD)
+	$(CXX) $(CXXSTD) $(WARN) -O1 -g $(SANITIZE) $(INC) test/allocator_test.cpp $(LIB) -o $@
 
 demo: $(BUILD)/demo
 	./$(BUILD)/demo
