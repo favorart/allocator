@@ -4,22 +4,41 @@
  * +-------------+------------------------------------+
  * | EmptyHeader | Memory ... -->      <-- ... Blocks |
  * +-------------+------------------------------------+
- *                                   ^  
+ *                                   ^
  */
 #ifdef DBG
 FILE* log_file = stdout; // fopen ("log", "a+");
-#endif 
+#endif
+//-------------------------------------
+namespace {
+/* Largest request that still fits Block::size_ after rounding */
+const size_t  kMaxRequest = UINT32_MAX / 2;
+}
 //-------------------------------------
           Allocator::Allocator (void *base, size_t size) :
-                                    memory_ ((uchar_t*)base),
-                                      size_ (size),
                                        err_ (NoMemory, "AllocError"),
+                                    memory_ (NULL),
+                                      size_ (0U),
                               blocks_count_ (0U),
+                               first_block_ (NULL),
+                                last_block_ (NULL),
                                  max_index_ (0U)
  {
+  uintptr_t begin = (uintptr_t) base;
+  uintptr_t end   = begin + size;
+  /* user blocks start aligned, descriptors are aligned at the top */
+  uintptr_t data  = (begin + kAlign - 1) / kAlign * kAlign;
+  if ( !base || end < begin || end - begin < sizeof (Block) )
+   throw err_;
+  uintptr_t head  = (end - sizeof (Block)) / alignof (Block) * alignof (Block);
+  if ( head < data || head - data < kAlign )
+   throw err_;
+
+  memory_ = (uchar_t*) data;
+  size_   = (size_t) (head + sizeof (Block) - data);
   std::memset (memory_, 0, size_);
   //--------------------------
-  first_block_ = (Block*) (memory_ + size_ - sizeof (Block));
+  first_block_ = (Block*) head;
 
   first_block_->size_ = 0;
   first_block_->prev_ = NULL;
@@ -34,12 +53,12 @@ FILE* log_file = stdout; // fopen ("log", "a+");
  //-------------------------------------
  Pointer  Allocator::alloc     (size_t size)
  {
-  if ( !size ) throw err_;
+  if ( !size || size > kMaxRequest ) throw err_;
   //--------------------------
-  Block *block = put_block (size);
+  Block *block = put_block (round_up (size));
   if ( !block ) throw err_;
   //--------------------------
-  Pointer pp (first_block_);
+  Pointer pp (this);
   pp.block_       = block;
   pp.block_index_ = block->index_;
   //--------------------------
@@ -48,73 +67,63 @@ FILE* log_file = stdout; // fopen ("log", "a+");
  //-------------------------------------
  void     Allocator::realloc   (Pointer &p, size_t new_size)
  {
-  Block *new_block = NULL, *block = p.Block ();
-
-  if ( block )
+  if ( !new_size )
   {
-   uchar_t  *ptr = (block->pointer_ + block->size_);
-
-   if ( ( block->next_ &&  (size_t) ( block->next_->pointer_ - ptr) >= new_size )
-     || (!block->next_ && ((size_t) ( (uchar_t*) last_block_ - ptr) >= new_size)) )
-   {
-    block->size_ = new_size;
-    return;
-   }
-   else if ( (new_block = put_block (new_size)) )
-   {
-    p.block_index_ = new_block->index_;
-    p.first_ = first_block_;
-
-    std::memcpy (new_block->pointer_, block->pointer_, block->size_);
-
-    del_block (block);
-    p.block_ = block;
-    return;
-   }   
-  }
-  
-  if ( (new_block = put_block (new_size)) )
-  {
-   p.block_       = new_block;
-   p.block_index_ = new_block->index_;
-   p.first_       = first_block_;
+   free (p);
    return;
   }
-  throw err_;
+  if ( new_size > kMaxRequest ) throw err_;
+  //--------------------------
+  Block *block = p.Block ();
+  if ( !block )
+  {
+   p = alloc (new_size);
+   return;
+  }
+  //--------------------------
+  size_t  size = round_up (new_size);
+  /* in place: up to the next block or up to the descriptors */
+  uchar_t  *limit = (block->next_) ? block->next_->pointer_ : (uchar_t*) last_block_;
+  if ( (size_t) (limit - block->pointer_) >= size )
+  {
+   block->size_ = (uint_t) size;
+   return;
+  }
+  //--------------------------
+  /* move: here size > block->size_ */
+  Block *new_block = put_block (size);
+  if ( !new_block ) throw err_;
+
+  std::memcpy (new_block->pointer_, block->pointer_, block->size_);
+
+  p.block_index_ = new_block->index_;
+  p.owner_       = this;
+  /* new_block is the last descriptor: del_block moves it into block's place */
+  del_block (block);
+  p.block_ = block;
  }
  //-------------------------------------
  void     Allocator::free      (Pointer &p)
  {
   //--------------------------
   del_block (p.Block ());
-  p.first_ = NULL;
+  p.owner_ = NULL;
   p.block_ = NULL;
-  p.block_index_ = 0;  
+  p.block_index_ = 0;
  }
  //-------------------------------------
  void     Allocator::defrag    ()
  {
-  Block *curr, *next;
-
-  curr = first_block_->next_;
-  next =         curr->next_;
-
-  int i = 0;
-  while ( next >= last_block_  )
+  /* The list is sorted by data address: slide every block down */
+  uchar_t  *end = memory_;
+  for ( Block *curr = first_block_->next_; curr; curr = curr->next_ )
   {
-   uchar_t  *ptr = (curr->pointer_ + curr->size_);
-   if ( next->pointer_ != ptr )
+   if ( curr->pointer_ != end )
    {
-    std::memmove (ptr, next->pointer_, next->size_);
-    next->pointer_ = ptr;
+    std::memmove (end, curr->pointer_, curr->size_);
+    curr->pointer_ = end;
    }
-
-#ifdef DBG
-   fprintf (log_file, "\ni=%d ptr=%d  sz=%u", i++, curr->pointer_ - memory_, curr->size_);
-#endif
-
-   curr = next;
-   next = next->next_;
+   end += curr->size_;
   }
  }
  //-------------------------------------

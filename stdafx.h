@@ -4,16 +4,13 @@
 
 #pragma once
 
-#ifdef __linux__
-/* linux code here */
-#elif   _WIN32
+#ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning (disable:4996)
-#else
-#error Platform not supported
 #endif
 
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>

@@ -1,31 +1,41 @@
 #include "stdafx.h"
 #include "allocator.h"
 
-void  AllocInRange       ();
-void  AllocReadWrite     ();
-void  AllocNoMem         ();
-void  AllocReuse         ();
-void  DefragMove         ();
-void  DefragMoveTwice    ();
-void  DefragAvailable    ();
-void  ReallocFromEmpty   ();
-void  ReallocGrowInplace ();
-void  ReallocShrink      ();
-void  ReallocGrow        ();
+#include <cstdio>
 
-int  main (int argc, char **argv)
+/* A short tour: allocate, fragment, defragment, keep using the smart pointers. */
+int  main ()
 {
-// AllocInRange ();
-// AllocReadWrite ();
-// AllocNoMem ();
-// AllocReuse ();
-// DefragMove ();
-// DefragMoveTwice ();
-// DefragAvailable ();
-// ReallocFromEmpty ();
-// ReallocGrowInplace ();
-// ReallocShrink ();
- ReallocGrow ();
+ alignas (std::max_align_t) static char arena[4096];
+ Allocator a (arena, sizeof (arena));
 
-	return 0;
+ Pointer p[4];
+ for ( int i = 0; i < 4; ++i )
+ {
+  p[i] = a.alloc (100);
+  std::snprintf (static_cast<char*> (p[i].get ()), 100, "block #%d", i);
+ }
+
+ a.free (p[0]);
+ a.free (p[2]);
+ std::printf ("before defrag: p[1] at +%td, p[3] at +%td\n",
+              static_cast<char*> (p[1].get ()) - arena,
+              static_cast<char*> (p[3].get ()) - arena);
+
+ a.defrag ();
+ std::printf ("after  defrag: p[1] at +%td, p[3] at +%td\n",
+              static_cast<char*> (p[1].get ()) - arena,
+              static_cast<char*> (p[3].get ()) - arena);
+ std::printf ("contents: \"%s\", \"%s\"\n",
+              static_cast<char*> (p[1].get ()),
+              static_cast<char*> (p[3].get ()));
+
+ a.realloc (p[1], 1000);
+ std::printf ("after realloc(1000): p[1] at +%td, still \"%s\"\n",
+              static_cast<char*> (p[1].get ()) - arena,
+              static_cast<char*> (p[1].get ()));
+
+ a.free (p[1]);
+ a.free (p[3]);
+ return 0;
 }

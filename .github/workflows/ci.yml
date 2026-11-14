@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "**" ]
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: linux (${{ matrix.cxx }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: [ g++, clang++ ]
+    env:
+      CXX: ${{ matrix.cxx }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: build (-Wall -Wextra -Wpedantic -Werror)
+      run: make all
+    - name: tests
+      run: make test
+    - name: tests under ASan + UBSan
+      # ASan of older clang crashes at startup with high ASLR entropy (kernel 6.x)
+      run: |
+        sudo sysctl -w vm.mmap_rnd_bits=28
+        make sanitize
+    - name: demo
+      run: make demo
+
+  windows:
+    name: windows (msvc)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: configure
+      run: cmake -S . -B build
+    - name: build (/W4 /WX)
+      run: cmake --build build --config Release
+    - name: tests
+      run: ctest --test-dir build -C Release --output-on-failure
