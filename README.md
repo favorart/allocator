@@ -125,6 +125,16 @@ The price of "no extra memory" is visible: `alloc()` walks the whole list
 (first fit, then the tail), so it costs O(blocks), and `free()` pays for
 resolving the `Pointer`. Compaction itself is a single `memmove` pass.
 
+## Releases
+
+Every commit merged into `master` that passes CI is tagged `vX.Y.Z` and
+published as a [GitHub Release](https://github.com/favorart/allocator/releases)
+with `include/allocator.h` and the static library for Linux, Windows and macOS.
+The version follows [Conventional Commits](https://www.conventionalcommits.org/):
+`BREAKING CHANGE` or `type!:` bumps the major version, `feat:` the minor one,
+anything else the patch. Only the 3 latest releases are kept; all tags stay.
+`v1.0.0` is the original 2015 version.
+
 ## Repository layout
 
 | Path | Contents |

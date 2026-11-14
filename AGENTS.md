@@ -16,3 +16,6 @@ defragmentation and a smart pointer), kept as a historical piece.
 - Changes that may affect performance come with `make bench` results before and after.
 - `README.md` describes the behavior; update it with the code.
 - Changes go through a pull request with green CI.
+- One commit is one complete change; the build and the tests pass at every commit.
+- Commit messages follow Conventional Commits (`fix:`, `feat:`, `refactor:`, `test:`,
+  `docs:`, `ci:`, `build:`): the release version is derived from them.
