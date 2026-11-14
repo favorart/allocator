@@ -77,7 +77,7 @@ a.realloc(p, 1000);                 // realloc(p, 0) frees
 a.free(p);
 ```
 
-`main.cpp` is a runnable version of this tour (`make demo`).
+[`examples/demo.cpp`](examples/demo.cpp) is a runnable version of this tour (`make demo`).
 
 ## Build and test
 
@@ -104,6 +104,19 @@ model after each operation.
 
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan)
 and with MSVC (`/W4 /WX`) on Windows.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| [`include/allocator.h`](include/allocator.h) | the public API (Doxygen comments) |
+| [`src/allocator.cpp`](src/allocator.cpp) | the implementation |
+| [`test/allocator_test.cpp`](test/allocator_test.cpp) | tests, with a tiny built-in harness |
+| [`examples/demo.cpp`](examples/demo.cpp) | the usage tour |
+
+To use the allocator in another project, add `src/allocator.cpp` to the build
+and `include/` to the include path, or `add_subdirectory()` this repository
+and link the `allocator` CMake target.
 
 ## Limitations
 
