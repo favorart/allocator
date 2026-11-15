@@ -32,6 +32,8 @@ jobs:
       run: |
         sudo sysctl -w vm.mmap_rnd_bits=28
         make sanitize
+    - name: demo
+      run: make demo
 
   windows:
     name: windows (msvc)

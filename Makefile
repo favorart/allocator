@@ -1,5 +1,5 @@
 # Allocator + Pointer: build, test and sanitizer targets.
-#   make          - build the tests
+#   make          - demo and tests
 #   make test     - run the tests
 #   make sanitize - run the tests under ASan + UBSan
 #   make clean
@@ -18,17 +18,23 @@ TESTS := test/allocator_test.cpp
 # GoogleTest: libgtest-dev (Debian/Ubuntu), googletest (Homebrew)
 GTEST ?= -lgtest_main -lgtest -pthread
 
-.PHONY: all test sanitize clean
-all: $(BUILD)/allocator_test
+.PHONY: all test sanitize demo clean
+all: $(BUILD)/demo $(BUILD)/allocator_test
 
 $(BUILD):
 	mkdir -p $@
+
+$(BUILD)/demo: examples/demo.cpp $(LIB) $(HDRS) | $(BUILD)
+	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) examples/demo.cpp $(LIB) -o $@
 
 $(BUILD)/allocator_test: $(TESTS) $(LIB) $(HDRS) | $(BUILD)
 	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) $(TESTS) $(LIB) $(GTEST) -o $@
 
 $(BUILD)/allocator_test_san: $(TESTS) $(LIB) $(HDRS) | $(BUILD)
 	$(CXX) $(CXXSTD) $(WARN) -O1 -g $(SANITIZE) $(INC) $(TESTS) $(LIB) $(GTEST) -o $@
+
+demo: $(BUILD)/demo
+	./$(BUILD)/demo
 
 test: $(BUILD)/allocator_test
 	./$(BUILD)/allocator_test
