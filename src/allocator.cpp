@@ -1,6 +1,8 @@
 #include "allocator.h"
 
 #include <cstring>
+#include <iomanip>
+#include <ostream>
 
 /*
  * +-------------+------------------------------------+
@@ -174,6 +176,32 @@ bool Allocator::check() const
             if (a->index_ == b->index_)
                 return false;
     return true;
+}
+
+void Allocator::dump(std::ostream& out) const
+{
+    const auto offset = [this](const void* p) {
+        return static_cast<std::size_t>(static_cast<const unsigned char*>(p) - memory_);
+    };
+    const auto range = [&out](std::size_t from, std::size_t to) -> std::ostream& {
+        return out << "  [" << std::setw(6) << from << ", " << std::setw(6) << to << ")  ";
+    };
+    const std::size_t blocks = static_cast<std::size_t>(first_block_ - last_block_);
+    out << "allocator " << allocatorVersion() << ": " << blocks << " blocks, next index "
+        << max_index_ + 1 << '\n';
+
+    std::size_t end = 0;
+    for (const Block* curr = first_block_->next_; curr; curr = curr->next_) {
+        const std::size_t from = offset(curr->pointer_);
+        if (from > end)
+            range(end, from) << "free " << from - end << '\n';
+        end = from + curr->size_;
+        range(from, end) << "block #" << curr->index_ << ", slot " << first_block_ - curr << '\n';
+    }
+    const std::size_t descriptors = offset(last_block_);
+    if (descriptors > end)
+        range(end, descriptors) << "free " << descriptors - end << " (tail)\n";
+    range(descriptors, offset(first_block_ + 1)) << blocks + 1 << " descriptors\n";
 }
 
 Allocator::Block* Allocator::tail_block() const

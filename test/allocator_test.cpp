@@ -2,12 +2,14 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <random>
 #include <set>
+#include <sstream>
 #include <tuple>
 #include <type_traits>
 #include <vector>
@@ -1031,6 +1033,27 @@ TEST(Check, FindsBrokenInvariants)
         Access::lowest(a)->prev_->next_ = nullptr; // a slot out of the list
         EXPECT_FALSE(a.check());
     }
+}
+
+//---- Allocator::dump --------------------
+TEST(Dump, MapOfTheArena)
+{
+    Allocator a(buf, 4096);
+    Pointer p = a.alloc(64), q = a.alloc(64), r = a.alloc(64);
+    a.free(q);
+    ostringstream out;
+    a.dump(out);
+    const string s = out.str();
+
+    EXPECT_NE(s.find(string("allocator ") + allocatorVersion() + ": 2 blocks, next index 4"),
+              string::npos);
+    EXPECT_NE(s.find("[     0,     64)  block #1, slot 1"), string::npos);
+    EXPECT_NE(s.find("[    64,    128)  free 64"), string::npos);
+    EXPECT_NE(s.find("[   128,    192)  block #3, slot 2"), string::npos);
+    EXPECT_NE(s.find("(tail)"), string::npos);
+    EXPECT_NE(s.find("3 descriptors"), string::npos);
+    EXPECT_EQ(count(s.begin(), s.end(), '\n'), 6);
+    (void)p, (void)r;
 }
 
 //---- Pointer -----------------------------
