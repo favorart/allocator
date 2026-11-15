@@ -32,6 +32,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 #include <stdexcept>
 #include <string>
 
@@ -149,6 +150,23 @@ public:
      * @return `true` if the allocator is consistent.
      */
     bool check() const;
+
+    /**
+     * @brief Prints the map of the arena, for debugging.
+     *
+     * One line per block and per gap, in address order, with offsets from
+     * the start of the data area; then the free tail and the descriptors:
+     * @code
+     * allocator 0.0.17: 2 blocks, next index 4
+     *   [     0,     64)  block #1, slot 1
+     *   [    64,    128)  free 64
+     *   [   128,    192)  block #3, slot 2
+     *   [   192,   3976)  free 3784 (tail)
+     *   [  3976,   4096)  3 descriptors
+     * @endcode
+     * @param out The stream to print to.
+     */
+    void dump(std::ostream& out) const;
 
 private:
     friend class Pointer;

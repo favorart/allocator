@@ -113,7 +113,8 @@ operations and checks them against the same kind of model; CI runs it for a
 minute. Both stress tests and the fuzzer also call `Allocator::check()`
 after every operation: it validates the invariants (a dense descriptor array,
 one address-sorted list, aligned non-overlapping blocks, unique indices) in
-O(blocks²).
+O(blocks²). `Allocator::dump(std::ostream&)` prints the map of the arena:
+blocks, gaps, the free tail and the descriptors, with offsets.
 
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
 with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS. The benchmark
