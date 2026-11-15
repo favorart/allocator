@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <random>
 #include <set>
 #include <vector>
 
@@ -14,7 +15,8 @@
  * (written for GoogleTest).
  *
  * The second group are regression tests for bugs found during
- * the 2026 review; the third covers the whole public API.
+ * the 2026 review; the third covers the whole public API; the last
+ * one is a randomized stress test against a byte-exact model.
  */
 
 using namespace std;
@@ -870,5 +872,77 @@ TEST(AllocError, TypeAndMessage)
         ADD_FAILURE() << "no throw";
     } catch (const std::runtime_error& re) {
         EXPECT_NE(re.what(), nullptr);
+    }
+}
+
+// Random alloc / free / realloc / defrag against a byte-exact model.
+TEST(Stress, RandomOpsAgainstModel)
+{
+    struct Live
+    {
+        Pointer p;
+        size_t size;
+        unsigned char seed;
+    };
+
+    for (unsigned run = 0; run < 20; ++run) {
+        mt19937 rng(run);
+        const size_t arena = 1024 + 512 * run;
+        Allocator a(buf + (run % 8), arena);
+        vector<Live> live;
+
+        auto fill = [](Live& l) {
+            unsigned char* v = static_cast<unsigned char*>(l.p.get());
+            for (size_t i = 0; i < l.size; ++i)
+                v[i] = static_cast<unsigned char>(l.seed + i * 7);
+        };
+        auto ok = [](Live& l, size_t n) {
+            unsigned char* v = static_cast<unsigned char*>(l.p.get());
+            if (!v)
+                return false;
+            for (size_t i = 0; i < n; ++i)
+                if (v[i] != static_cast<unsigned char>(l.seed + i * 7))
+                    return false;
+            return true;
+        };
+
+        for (int step = 0; step < 3000; ++step) {
+            unsigned op = rng() % 10;
+            size_t size = 1 + rng() % (arena / 8);
+            if (op < 5 || live.empty()) {
+                try {
+                    Live l{a.alloc(size), size, static_cast<unsigned char>(rng())};
+                    unsigned char* v = static_cast<unsigned char*>(l.p.get());
+                    EXPECT_TRUE(v >= reinterpret_cast<unsigned char*>(buf) &&
+                                v + size <=
+                                    reinterpret_cast<unsigned char*>(buf) + run % 8 + arena);
+                    fill(l);
+                    live.push_back(l);
+                } catch (AllocError&) {
+                }
+            } else if (op < 8) {
+                size_t k = rng() % live.size();
+                a.free(live[k].p);
+                live.erase(live.begin() + k);
+            } else if (op < 9) {
+                size_t k = rng() % live.size();
+                try {
+                    a.realloc(live[k].p, size);
+                    size_t kept = min(size, live[k].size);
+                    EXPECT_TRUE(ok(live[k], kept));
+                    live[k].size = size;
+                    fill(live[k]);
+                } catch (AllocError&) {
+                    EXPECT_TRUE(ok(live[k], live[k].size));
+                }
+            } else
+                a.defrag();
+
+            for (Live& l : live)
+                if (!ok(l, l.size)) {
+                    ADD_FAILURE() << "live block corrupted";
+                    return;
+                }
+        }
     }
 }
