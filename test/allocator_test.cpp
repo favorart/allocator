@@ -552,6 +552,48 @@ TEST(Regression, DefragEmptyAndHead)
     CHECK(C.get() == start);
 }
 
+// Shrinking a block with an adjacent neighbour moved it and
+// copied the old (larger) size into the new, smaller block.
+TEST(Regression, ReallocShrinkWithNeighbour)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(256);
+    Pointer p2 = a.alloc(256);
+    writeTo(p, 256);
+    writeTo(p2, 256);
+
+    void* ptr = p.get();
+    a.realloc(p, 64);
+    CHECK(p.get() == ptr);
+    CHECK(isDataOk(p, 64));
+    CHECK(isDataOk(p2, 256));
+}
+
+// Growing in place only needs (new_size - size) free bytes after the block.
+TEST(Regression, ReallocGrowIntoExactGap)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(64);
+    Pointer g = a.alloc(64);
+    Pointer p2 = a.alloc(64);
+    writeTo(p, 64);
+    a.free(g);
+
+    void* ptr = p.get();
+    a.realloc(p, 128);
+    CHECK(p.get() == ptr);
+    CHECK(isDataOk(p, 64));
+    (void)p2;
+}
+
+TEST(Regression, ReallocToZeroFrees)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(64);
+    a.realloc(p, 0);
+    CHECK(p.get() == nullptr);
+}
+
 //-----------------------------------------
 int main(int argc, char** argv)
 {
