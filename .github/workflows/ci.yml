@@ -32,6 +32,8 @@ jobs:
         make sanitize
     - name: demo
       run: make demo
+    - name: benchmark
+      run: make bench
 
   windows:
     name: windows (msvc)
@@ -39,11 +41,13 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: configure
-      run: cmake -S . -B build
+      run: cmake -S . -B build -DALLOCATOR_BUILD_BENCH=ON
     - name: build (/W4 /WX)
       run: cmake --build build --config Release
     - name: tests
       run: ctest --test-dir build -C Release --output-on-failure
+    - name: benchmark
+      run: build/Release/allocator_bench
 
   macos:
     name: macos (clang)
@@ -51,11 +55,13 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: configure
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_BENCH=ON
     - name: build
       run: cmake --build build
     - name: tests
       run: ctest --test-dir build --output-on-failure
+    - name: benchmark
+      run: build/allocator_bench
 
   # Release binaries of a master commit that passed every check:
   # the header and the static library for each OS.
