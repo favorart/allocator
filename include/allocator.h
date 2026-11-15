@@ -77,9 +77,10 @@ class Pointer;
  *
  * All bookkeeping lives inside the buffer. Blocks are handed out as
  * Pointer objects, because defrag() and realloc() may move them.
- * Not thread-safe.
+ * Not thread-safe. Neither copyable nor movable: every Pointer keeps
+ * the address of its allocator.
  */
-class Allocator
+class Allocator final
 {
 public:
     /**
@@ -90,6 +91,9 @@ public:
      *         small for the list head and one aligned data unit.
      */
     explicit Allocator(void* base, std::size_t size);
+
+    Allocator(const Allocator&) = delete;
+    Allocator& operator=(const Allocator&) = delete;
 
     /**
      * @brief Allocates a block, first fit.
@@ -185,7 +189,7 @@ private:
  * index. Descriptors only move towards the list head, so get() finds a
  * moved block by scanning upward from that slot.
  */
-class Pointer
+class Pointer final
 {
 public:
     /** @brief Creates an empty pointer: get() returns `nullptr`. */
