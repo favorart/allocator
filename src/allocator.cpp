@@ -14,6 +14,15 @@
  * - indices of live blocks are unique and only grow.
  */
 
+#ifndef ALLOCATOR_VERSION
+#define ALLOCATOR_VERSION "unknown" // set by the build from `git describe`
+#endif
+
+const char* allocatorVersion()
+{
+    return ALLOCATOR_VERSION;
+}
+
 namespace {
 /** The largest request that still fits Block::size_ after rounding up. */
 constexpr std::size_t kMaxRequest = UINT32_MAX / 2;

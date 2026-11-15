@@ -14,7 +14,9 @@ SANITIZE := -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-r
 BUILD := build
 LIB   := src/allocator.cpp
 HDRS  := include/allocator.h
-INC   := -Iinclude
+# the latest tag (`git describe`): 0.0.9, or 0.0.9-2-gabc1234 after it
+ALLOCATOR_VERSION ?= $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null | sed 's/^v//')
+INC   := -Iinclude -DALLOCATOR_VERSION='"$(or $(ALLOCATOR_VERSION),unknown)"'
 TESTS := test/allocator_test.cpp
 # GoogleTest: libgtest-dev (Debian/Ubuntu), googletest (Homebrew)
 GTEST ?= -lgtest_main -lgtest -pthread

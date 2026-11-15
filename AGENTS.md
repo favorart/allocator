@@ -19,4 +19,5 @@ defragmentation and a smart pointer), kept as a historical piece.
 - One commit is one complete change; the build and the tests pass at every commit.
 - Commit messages follow Conventional Commits (`fix:`, `feat:`, `refactor:`, `test:`,
   `docs:`, `ci:`, `build:`).
-- Every push to `master` is released as the next patch version (`v0.0.N`).
+- Every push to `master` is released as the next patch version (`v0.0.N`); the version comes
+  from the tag at build time (`git describe`), never a constant in the code.

@@ -63,6 +63,13 @@ private:
     AllocErrorType type_;
 };
 
+/**
+ * @brief The library version, taken from the git tag at build time.
+ * @return "0.0.9" for a tagged build, "0.0.9-2-gabc1234" for a later commit,
+ *         "unknown" without git.
+ */
+const char* allocatorVersion();
+
 class Pointer;
 
 /**

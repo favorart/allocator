@@ -108,7 +108,8 @@ a randomized stress test that checks every live block byte by byte against a
 model after each operation.
 
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
-with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS.
+with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS. The benchmark
+runs on pushes to `master`; documentation-only changes skip CI.
 
 ## Performance
 
@@ -139,6 +140,11 @@ Every push to `master` that passes CI is tagged with the next patch version
 Only the 3 latest releases are kept; all tags stay. A minor or major version
 is a tag pushed by hand; the numbering continues from it.
 `v0.0.1` is the original 2015 code with the build and CI added.
+
+`allocatorVersion()` returns the version the library was built as: the tag
+(`0.0.9`), or `git describe` after it (`0.0.9-2-gabc1234`); a released build
+carries the version of its tag. `ALLOCATOR_VERSION=...` overrides it in both
+builds.
 
 ## Repository layout
 
