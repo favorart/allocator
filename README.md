@@ -82,9 +82,11 @@ a.free(p);
 ## Build and test
 
 Requires a C++17 compiler; the tests use
-[GoogleTest](https://github.com/google/googletest). The `Makefile` links the
-system one (`libgtest-dev` on Debian/Ubuntu, `googletest` in Homebrew,
-`GTEST=...` overrides the flags), CMake downloads it. Two builds are supported:
+[GoogleTest](https://github.com/google/googletest), the system one
+(`libgtest-dev` on Debian/Ubuntu, `googletest` in Homebrew). The `Makefile`
+links it (`GTEST=...` overrides the flags); CMake finds it and downloads a pinned
+release only when none is installed (`-DALLOCATOR_BUILD_TESTS=OFF` builds just
+the library). Two builds are supported:
 
 ```bash
 make            # demo + tests, -Wall -Wextra -Wpedantic -Werror
