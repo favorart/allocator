@@ -14,6 +14,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# A push to master is released: the build jobs pack what they built
+# (the header and the static library), the release job only collects it.
+env:
+  RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+
 jobs:
   linux:
     name: linux (${{ matrix.cxx }})
@@ -45,6 +50,19 @@ jobs:
       run: make demo
     - name: benchmark
       run: make bench
+    - name: pack
+      if: env.RELEASE == 'true' && matrix.cxx == 'g++'
+      run: |
+        cmake -S . -B build-pkg -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_TESTS=OFF
+        cmake --build build-pkg --target allocator
+        sh .github/pack.sh build-pkg
+    - uses: actions/upload-artifact@v5
+      if: env.RELEASE == 'true' && matrix.cxx == 'g++'
+      with:
+        name: allocator-${{ runner.os }}
+        path: allocator-*.tar.gz
+        if-no-files-found: error
+        retention-days: 1
 
   windows:
     name: windows (msvc)
@@ -65,6 +83,17 @@ jobs:
       run: ctest --test-dir build -C Release --output-on-failure
     - name: benchmark
       run: build/Release/allocator_bench
+    - name: pack
+      if: env.RELEASE == 'true'
+      shell: bash
+      run: sh .github/pack.sh build
+    - uses: actions/upload-artifact@v5
+      if: env.RELEASE == 'true'
+      with:
+        name: allocator-${{ runner.os }}
+        path: allocator-*.tar.gz
+        if-no-files-found: error
+        retention-days: 1
 
   macos:
     name: macos (clang)
@@ -85,34 +114,11 @@ jobs:
       run: ctest --test-dir build --output-on-failure
     - name: benchmark
       run: build/allocator_bench
-
-  # Release binaries of a master commit that passed every check:
-  # the header and the static library for each OS.
-  package:
-    name: package (${{ matrix.os }})
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [ linux, windows, macos ]
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-    - uses: actions/checkout@v5
-    - name: build the library
-      run: |
-        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_TESTS=OFF
-        cmake --build build --config Release --target allocator
     - name: pack
-      shell: bash
-      run: |
-        mkdir -p pkg/include pkg/lib
-        cp include/allocator.h pkg/include/
-        cp LICENSE README.md pkg/
-        find build -maxdepth 2 -type f \( -name liballocator.a -o -name allocator.lib \) -exec cp {} pkg/lib/ \;
-        test -n "$(ls pkg/lib)"
-        tar -czf "allocator-${{ runner.os }}-${{ runner.arch }}.tar.gz" -C pkg .
+      if: env.RELEASE == 'true'
+      run: sh .github/pack.sh build
     - uses: actions/upload-artifact@v5
+      if: env.RELEASE == 'true'
       with:
         name: allocator-${{ runner.os }}
         path: allocator-*.tar.gz
@@ -122,7 +128,8 @@ jobs:
   # Tag the master commit with the next patch version: v0.0.1, v0.0.2, ...
   # A minor or major bump is a tag pushed by hand; the numbering continues from it.
   tag:
-    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [ linux, windows, macos ]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -145,7 +152,7 @@ jobs:
         git push origin "$tag"
         echo "new_tag=$tag" >> "$GITHUB_OUTPUT"
 
-  # GitHub Release for the new tag with the binaries built above.
+  # GitHub Release for the new tag with the archives packed by the build jobs.
   # Only the 3 latest releases are kept (their tags stay).
   release:
     needs: tag
