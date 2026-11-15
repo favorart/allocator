@@ -594,6 +594,19 @@ TEST(Regression, ReallocToZeroFrees)
     CHECK(p.get() == nullptr);
 }
 
+// AllocError inherited std::runtime_error privately.
+TEST(Regression, ErrorIsStdException)
+{
+    Allocator a(buf, 1024);
+    bool caught = false;
+    try {
+        a.alloc(1u << 20);
+    } catch (const std::exception&) {
+        caught = true;
+    }
+    CHECK(caught);
+}
+
 //-----------------------------------------
 int main(int argc, char** argv)
 {
