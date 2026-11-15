@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(ALLOCATOR_BUILD_BENCH "Build the benchmark" OFF)
 option(ALLOCATOR_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 
 # GoogleTest; added before the warning flags, which are for the project's own code
@@ -40,3 +41,8 @@ add_executable(allocator_test test/allocator_test.cpp)
 target_link_libraries(allocator_test PRIVATE allocator GTest::gtest_main)
 include(GoogleTest)
 gtest_discover_tests(allocator_test)
+
+if(ALLOCATOR_BUILD_BENCH)
+  add_executable(allocator_bench bench/allocator_bench.cpp)
+  target_link_libraries(allocator_bench PRIVATE allocator)
+endif()
