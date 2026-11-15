@@ -53,10 +53,10 @@ Pointer Allocator::alloc(std::size_t size)
     if (!block)
         throw err_;
 
-    Pointer pp(first_block_);
-    pp.block_ = block;
-    pp.block_index_ = block->index_;
-    return pp;
+    Pointer p(this);
+    p.block_ = block;
+    p.block_index_ = block->index_;
+    return p;
 }
 
 void Allocator::realloc(Pointer& p, std::size_t new_size)
@@ -64,7 +64,7 @@ void Allocator::realloc(Pointer& p, std::size_t new_size)
     // keep the following blocks aligned
     new_size = round_up(new_size);
 
-    Block *new_block = nullptr, *block = p.Block();
+    Block *new_block = nullptr, *block = p.find();
 
     if (block) {
         unsigned char* ptr = (block->pointer_ + block->size_);
@@ -75,7 +75,7 @@ void Allocator::realloc(Pointer& p, std::size_t new_size)
             return;
         } else if ((new_block = put_block(new_size))) {
             p.block_index_ = new_block->index_;
-            p.first_ = first_block_;
+            p.owner_ = this;
 
             std::memcpy(new_block->pointer_, block->pointer_, block->size_);
 
@@ -88,7 +88,7 @@ void Allocator::realloc(Pointer& p, std::size_t new_size)
     if ((new_block = put_block(new_size))) {
         p.block_ = new_block;
         p.block_index_ = new_block->index_;
-        p.first_ = first_block_;
+        p.owner_ = this;
         return;
     }
     throw err_;
@@ -96,8 +96,8 @@ void Allocator::realloc(Pointer& p, std::size_t new_size)
 
 void Allocator::free(Pointer& p)
 {
-    del_block(p.Block());
-    p.first_ = nullptr;
+    del_block(p.find());
+    p.owner_ = nullptr;
     p.block_ = nullptr;
     p.block_index_ = 0;
 }
