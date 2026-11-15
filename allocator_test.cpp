@@ -1,6 +1,6 @@
 #include "allocator.h"
-#include "stdafx.h"
 
+#include <cstdio>
 #include <iostream>
 #include <set>
 #include <vector>
@@ -33,13 +33,13 @@ void AllocInRange()
 static void writeTo(Pointer& p, size_t size)
 {
     char* v = reinterpret_cast<char*>(p.get());
-    for (uint_t i = 0; i < size; i++)
+    for (std::uint32_t i = 0; i < size; i++)
         v[i] = i % 31;
 }
 static bool isDataOk(Pointer& p, size_t size)
 {
     char* v = reinterpret_cast<char*>(p.get());
-    for (uint_t i = 0; i < size; i++) {
+    for (std::uint32_t i = 0; i < size; i++) {
         if (v[i] != i % 31)
             return false;
     }

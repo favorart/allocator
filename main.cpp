@@ -1,5 +1,4 @@
 #include "allocator.h"
-#include "stdafx.h"
 
 void AllocInRange();
 void AllocReadWrite();
