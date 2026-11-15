@@ -103,9 +103,11 @@ ctest --test-dir build --output-on-failure
 
 `./build/allocator_test --gtest_filter='Regression.*'` runs a subset of the
 tests. The suite: the course tests (originally written for GoogleTest),
-regression tests for every bug below, unit tests for the whole public API, and
-a randomized stress test that checks every live block byte by byte against a
-model after each operation.
+regression tests for every bug below, unit tests for the whole public API,
+arenas at every misaligned offset, and randomized stress tests: one checks
+every live block byte by byte against a model after each operation, another
+checks that every copy of a `Pointer` follows its block or resolves to
+`nullptr`.
 
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
 with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS. The benchmark
