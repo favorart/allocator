@@ -353,6 +353,47 @@ TEST(Allocator, ReallocGrow)
 // Regression tests (2026 review)
 //=========================================
 
+// alloc() on an empty allocator did not check the size at all.
+TEST(Regression, AllocTooLargeOnEmpty)
+{
+    Allocator a(buf, 1024);
+    EXPECT_ALLOC_ERROR(a.alloc(4096), NoMemory);
+    EXPECT_ALLOC_ERROR(a.alloc(0), NoMemory);
+}
+
+// The free-tail check underflowed when data reached the block
+// descriptors, so new descriptors were written over user data.
+TEST(Regression, FillToTheBrim)
+{
+    for (size_t size : {1, 7, 16, 24, 40, 100}) {
+        Allocator a(buf, 2048);
+        vector<Pointer> ptrs;
+        EXPECT_TRUE(fillUp(a, size, ptrs));
+        for (Pointer& p : ptrs)
+            EXPECT_TRUE(isDataOk(p, size));
+    }
+}
+
+// A block placed into a gap also needs room for one more
+// descriptor below the data tail.
+TEST(Regression, GapNeedsDescriptorRoom)
+{
+    for (size_t size : {16, 32, 48}) {
+        Allocator a(buf, 2048);
+        vector<Pointer> ptrs;
+        EXPECT_TRUE(fillUp(a, size, ptrs));
+        a.free(ptrs[0]);
+        a.free(ptrs[2]);
+        ptrs.erase(ptrs.begin() + 2);
+        ptrs.erase(ptrs.begin());
+
+        // fill both gaps and whatever is left
+        fillUp(a, size, ptrs);
+        for (Pointer& p : ptrs)
+            EXPECT_TRUE(isDataOk(p, size));
+    }
+}
+
 // Descriptors were placed at (base + size - sizeof (Block)) without
 // alignment: misaligned access is UB (caught by UBSan).
 TEST(Regression, UnalignedArena)

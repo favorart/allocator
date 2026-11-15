@@ -76,8 +76,22 @@ private:
 
     static std::size_t round_up(std::size_t size) { return (size + kAlign - 1) / kAlign * kAlign; }
 
+    /* free bytes between the end of the data and the descriptors */
+    std::size_t tail_room(const unsigned char* data_end) const
+    {
+        return static_cast<std::size_t>(reinterpret_cast<const unsigned char*>(last_block_) -
+                                        data_end);
+    }
+
+    /* end of the block's data; for the list head, the start of the buffer */
+    unsigned char* end_of(const Block* block) const
+    {
+        return (block == first_block_) ? memory_ : block->pointer_ + block->size_;
+    }
+
+    Block* tail_block() const;
     Block* new_block(std::uint32_t size, unsigned char* ptr, Block* prev, Block* next);
-    Block* put_block(std::uint32_t size);
+    Block* put_block(std::size_t size);
     int del_block(Block* block);
 
     AllocError err_;             /* to avoid the call new */
