@@ -29,6 +29,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(ALLOCATOR_BUILD_TESTS "Build the tests (needs GoogleTest)" ON)
 option(ALLOCATOR_BUILD_BENCH "Build the benchmark" OFF)
+option(ALLOCATOR_BUILD_FUZZ "Build the libFuzzer target (Clang only)" OFF)
 option(ALLOCATOR_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 
 # GoogleTest: the system one, downloaded only when there is none.
@@ -80,4 +81,13 @@ endif()
 if(ALLOCATOR_BUILD_BENCH)
   add_executable(allocator_bench bench/allocator_bench.cpp)
   target_link_libraries(allocator_bench PRIVATE allocator)
+endif()
+
+# the library is compiled into the target: libFuzzer needs its coverage
+if(ALLOCATOR_BUILD_FUZZ)
+  set(fuzz_flags -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=all)
+  add_executable(allocator_fuzz fuzz/allocator_fuzz.cpp src/allocator.cpp)
+  target_include_directories(allocator_fuzz PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_compile_options(allocator_fuzz PRIVATE ${fuzz_flags})
+  target_link_options(allocator_fuzz PRIVATE ${fuzz_flags})
 endif()

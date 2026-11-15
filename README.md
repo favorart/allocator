@@ -107,7 +107,10 @@ regression tests for every bug below, unit tests for the whole public API,
 arenas at every misaligned offset, and randomized stress tests: one checks
 every live block byte by byte against a model after each operation, another
 checks that every copy of a `Pointer` follows its block or resolves to
-`nullptr`.
+`nullptr`. `make fuzz` (Clang, or `-DALLOCATOR_BUILD_FUZZ=ON`) runs a
+libFuzzer target that decodes its input into an arena and a sequence of
+operations and checks them against the same kind of model; CI runs it for a
+minute.
 
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
 with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS. The benchmark
