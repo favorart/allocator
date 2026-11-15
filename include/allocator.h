@@ -71,13 +71,18 @@ private:
         Block* next_;
     };
 
+    /* every user block starts at this alignment, like malloc() */
+    static constexpr std::size_t kAlign = alignof(std::max_align_t);
+
+    static std::size_t round_up(std::size_t size) { return (size + kAlign - 1) / kAlign * kAlign; }
+
     Block* new_block(std::uint32_t size, unsigned char* ptr, Block* prev, Block* next);
     Block* put_block(std::uint32_t size);
     int del_block(Block* block);
 
     AllocError err_;             /* to avoid the call new */
-    unsigned char* memory_;      /* available memory */
-    std::uint32_t size_;         /* size of memory */
+    unsigned char* memory_;      /* start of the data area (aligned) */
+    std::size_t size_;           /* size of the managed area */
     std::uint32_t blocks_count_; /* quantity of blocks */
     Block* first_block_;
     Block* last_block_;
