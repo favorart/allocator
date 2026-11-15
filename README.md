@@ -110,7 +110,10 @@ checks that every copy of a `Pointer` follows its block or resolves to
 `nullptr`. `make fuzz` (Clang, or `-DALLOCATOR_BUILD_FUZZ=ON`) runs a
 libFuzzer target that decodes its input into an arena and a sequence of
 operations and checks them against the same kind of model; CI runs it for a
-minute.
+minute. Both stress tests and the fuzzer also call `Allocator::check()`
+after every operation: it validates the invariants (a dense descriptor array,
+one address-sorted list, aligned non-overlapping blocks, unique indices) in
+O(blocks²).
 
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
 with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS. The benchmark

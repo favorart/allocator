@@ -139,6 +139,17 @@ public:
      */
     void defrag();
 
+    /**
+     * @brief Checks the internal invariants, for tests and debugging.
+     *
+     * The descriptors fill one dense array; the list from the head visits
+     * each of them once, in data address order; blocks are aligned, do not
+     * overlap and end below the descriptors; indices are unique.
+     * O(blocks²), allocates nothing; not meant for every call in production.
+     * @return `true` if the allocator is consistent.
+     */
+    bool check() const;
+
 private:
     friend class Pointer;
     friend struct AllocatorTestAccess; // the tests reach the index counter

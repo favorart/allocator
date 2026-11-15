@@ -139,6 +139,43 @@ void Allocator::check_owner(const Pointer& p) const
         throw foreign_;
 }
 
+bool Allocator::check() const
+{
+    const unsigned char* descriptors = reinterpret_cast<const unsigned char*>(last_block_);
+    if (!memory_ || !first_block_ || last_block_ > first_block_ ||
+        reinterpret_cast<std::uintptr_t>(memory_) % kAlign != 0)
+        return false;
+
+    const Block* head = first_block_;
+    if (head->pointer_ || head->size_ || head->index_ || head->prev_)
+        return false;
+
+    // the list visits every slot of [last_block_, first_block_) exactly once
+    const std::size_t slots = static_cast<std::size_t>(first_block_ - last_block_);
+    std::size_t visited = 0;
+    const unsigned char* end = memory_;
+    for (const Block *prev = head, *curr = head->next_; curr; prev = curr, curr = curr->next_) {
+        if (++visited > slots || curr < last_block_ || curr >= first_block_ || curr->prev_ != prev)
+            return false;
+        // sorted, aligned, not overlapping, below the descriptors
+        if (curr->pointer_ < end || curr->size_ == 0 || curr->size_ % kAlign != 0 ||
+            reinterpret_cast<std::uintptr_t>(curr->pointer_) % kAlign != 0 ||
+            curr->pointer_ + curr->size_ > descriptors)
+            return false;
+        if (curr->index_ == 0 || curr->index_ > max_index_)
+            return false;
+        end = curr->pointer_ + curr->size_;
+    }
+    if (visited != slots)
+        return false;
+
+    for (const Block* a = last_block_; a != first_block_; ++a)
+        for (const Block* b = a + 1; b != first_block_; ++b)
+            if (a->index_ == b->index_)
+                return false;
+    return true;
+}
+
 Allocator::Block* Allocator::tail_block() const
 {
     Block* curr = first_block_;
