@@ -489,3 +489,25 @@ TEST(Regression, CachedSlotReusedByData)
     EXPECT_EQ(X.get(), x);
     EXPECT_TRUE(isDataOk(X, 64));
 }
+
+// defrag() dereferenced a null pointer on an empty allocator
+// and never moved the first block down to the start of the arena.
+TEST(Regression, DefragEmptyAndHead)
+{
+    Allocator a(buf, sizeof(buf));
+    a.defrag();
+
+    Pointer A = a.alloc(100);
+    void* start = A.get();
+    Pointer B = a.alloc(100);
+    writeTo(B, 100);
+    a.free(A);
+    a.defrag();
+    EXPECT_EQ(B.get(), start);
+    EXPECT_TRUE(isDataOk(B, 100));
+
+    // the gap before the first block is reusable too
+    a.free(B);
+    Pointer C = a.alloc(100);
+    EXPECT_EQ(C.get(), start);
+}
