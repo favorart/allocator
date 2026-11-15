@@ -9,8 +9,10 @@ WARN     := -Wall -Wextra
 CXXFLAGS ?= -O2 -g
 
 BUILD := build
-LIB   := allocator.cpp
-HDRS  := allocator.h
+LIB   := src/allocator.cpp
+HDRS  := include/allocator.h
+INC   := -Iinclude
+TESTS := test/main.cpp test/allocator_test.cpp
 
 .PHONY: all test clean
 all: $(BUILD)/allocator_test
@@ -18,8 +20,8 @@ all: $(BUILD)/allocator_test
 $(BUILD):
 	mkdir -p $@
 
-$(BUILD)/allocator_test: main.cpp allocator_test.cpp $(LIB) $(HDRS) | $(BUILD)
-	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) main.cpp allocator_test.cpp $(LIB) -o $@
+$(BUILD)/allocator_test: $(TESTS) $(LIB) $(HDRS) | $(BUILD)
+	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) $(TESTS) $(LIB) -o $@
 
 test: $(BUILD)/allocator_test
 	./$(BUILD)/allocator_test
