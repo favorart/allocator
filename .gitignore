@@ -26,3 +26,9 @@
 *.exe
 *.out
 *.app
+
+# Build directories
+build/
+cmake-build-*/
+out/
+.vs/
