@@ -175,7 +175,8 @@ and link the `allocator` CMake target.
 - A single request is limited to 2 GiB; every block is rounded up to
   `alignof(std::max_align_t)` (16 bytes with GCC/Clang on x86-64, 8 with MSVC); one descriptor takes 32 bytes
   on 64-bit platforms.
-- The `Pointer` must be used with the allocator that created it, and must not
+- A `Pointer` belongs to the allocator that created it (`free()` or
+  `realloc()` of it elsewhere throws `AllocError(InvalidFree)`) and must not
   outlive it. The allocator is neither copyable nor movable.
 
 ## 2026 review
@@ -195,6 +196,7 @@ one of them. Running them as real tests under ASan/UBSan found:
 | `realloc()` shrink with an adjacent neighbour | moved the block and copied the old size into the smaller one | in place whenever it fits; copy only when growing |
 | descriptors at `base + size - sizeof(Block)`, data at any offset | misaligned access (UB) | aligned descriptor array and data blocks |
 | `AllocError` inherited `std::runtime_error` privately | not catchable as `std::exception` | public inheritance |
+| `free()`/`realloc()` of a `Pointer` of another allocator | the block was looked up there and unlinked here: both allocators corrupted | throws `AllocError(InvalidFree)` |
 | `Allocator` was copyable | a copy and the original handed out the same memory twice | not copyable or movable; `Allocator` and `Pointer` are `final` |
 
 Plus: member-initialization order, `printf(non-literal)`, string literals as

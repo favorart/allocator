@@ -38,7 +38,7 @@
 /** @brief The kind of an allocation error. */
 enum AllocErrorType
 {
-    InvalidFree, ///< Reserved: freeing a pointer that is not allocated.
+    InvalidFree, ///< free() or realloc() of a Pointer from another allocator.
     NoMemory     ///< Not enough memory, or an invalid size or arena.
 };
 
@@ -117,6 +117,7 @@ public:
      * @param new_size The new size in bytes. 0 works like free().
      * @throws AllocError (NoMemory) if there is no space; `p` and its
      *         data stay unchanged.
+     * @throws AllocError (InvalidFree) if `p` belongs to another allocator.
      */
     void realloc(Pointer& p, std::size_t new_size);
 
@@ -125,6 +126,7 @@ public:
      *
      * An empty or already freed pointer (or its copy) is ignored.
      * @param p The block to free.
+     * @throws AllocError (InvalidFree) if `p` belongs to another allocator.
      */
     void free(Pointer& p);
 
@@ -172,8 +174,10 @@ private:
     Block* new_block(std::uint32_t size, unsigned char* ptr, Block* prev, Block* next);
     Block* put_block(std::size_t size);
     void del_block(Block* block);
+    void check_owner(const Pointer& p) const;
 
     AllocError err_;             ///< Prepared in advance, to throw without building a message.
+    AllocError foreign_;         ///< The same for a Pointer of another allocator.
     unsigned char* memory_;      ///< Start of the data area (aligned).
     std::size_t size_;           ///< Size of the managed area.
     std::uint32_t blocks_count_; ///< Number of descriptors, the list head included.

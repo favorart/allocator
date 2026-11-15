@@ -29,8 +29,9 @@ constexpr std::size_t kMaxRequest = UINT32_MAX / 2;
 } // namespace
 
 Allocator::Allocator(void* base, std::size_t size)
-    : err_(NoMemory, "AllocError"), memory_(nullptr), size_(0), blocks_count_(0),
-      first_block_(nullptr), last_block_(nullptr), max_index_(0)
+    : err_(NoMemory, "AllocError"), foreign_(InvalidFree, "Pointer of another allocator"),
+      memory_(nullptr), size_(0), blocks_count_(0), first_block_(nullptr), last_block_(nullptr),
+      max_index_(0)
 {
     const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(base);
     const std::uintptr_t end = begin + size;
@@ -74,6 +75,7 @@ Pointer Allocator::alloc(std::size_t size)
 
 void Allocator::realloc(Pointer& p, std::size_t new_size)
 {
+    check_owner(p);
     if (!new_size) {
         free(p);
         return;
@@ -112,6 +114,7 @@ void Allocator::realloc(Pointer& p, std::size_t new_size)
 
 void Allocator::free(Pointer& p)
 {
+    check_owner(p);
     del_block(p.find());
     p.owner_ = nullptr;
     p.block_ = nullptr;
@@ -129,6 +132,14 @@ void Allocator::defrag()
         }
         end += curr->size_;
     }
+}
+
+void Allocator::check_owner(const Pointer& p) const
+{
+    // p.find() would resolve the block in the other allocator,
+    // and del_block() would unlink it from this one
+    if (p.owner_ && p.owner_ != this)
+        throw foreign_;
 }
 
 Allocator::Block* Allocator::tail_block() const
