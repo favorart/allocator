@@ -39,7 +39,7 @@ jobs:
       run: ctest --test-dir build -C Release --output-on-failure
 
   # Release binaries of a master commit that passed every check:
-  # the headers and the static library for each OS.
+  # the header and the static library for each OS.
   package:
     name: package (${{ matrix.os }})
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -58,7 +58,7 @@ jobs:
       shell: bash
       run: |
         mkdir -p pkg/include pkg/lib
-        cp allocator.h stdafx.h pkg/include/
+        cp allocator.h pkg/include/
         cp LICENSE README.md pkg/
         find build -maxdepth 2 -type f \( -name liballocator.a -o -name allocator.lib \) -exec cp {} pkg/lib/ \;
         test -n "$(ls pkg/lib)"

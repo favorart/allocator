@@ -10,7 +10,7 @@ CXXFLAGS ?= -O2 -g
 
 BUILD := build
 LIB   := allocator.cpp
-HDRS  := allocator.h stdafx.h
+HDRS  := allocator.h
 
 .PHONY: all test clean
 all: $(BUILD)/allocator_test
