@@ -9,10 +9,16 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR cancels its previous run; master runs always finish (they tag).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   linux:
     name: linux (${{ matrix.cxx }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -22,7 +28,10 @@ jobs:
     steps:
     - uses: actions/checkout@v5
     - name: install GoogleTest
-      run: sudo apt-get update && sudo apt-get install -y libgtest-dev
+      # the runner's package index is usually fresh enough; update only if it is not
+      run: |
+        sudo apt-get install -y --no-install-recommends libgtest-dev ||
+          { sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtest-dev; }
     - name: build (-Wall -Wextra -Wpedantic -Werror)
       run: make all
     - name: tests
@@ -40,8 +49,14 @@ jobs:
   windows:
     name: windows (msvc)
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v5
+    # no system GoogleTest on Windows: CMake downloads and builds it, the cache keeps it
+    - uses: actions/cache@v6
+      with:
+        path: build/_deps
+        key: deps-${{ runner.os }}-msvc-${{ hashFiles('CMakeLists.txt') }}
     - name: configure
       run: cmake -S . -B build -DALLOCATOR_BUILD_BENCH=ON
     - name: build (/W4 /WX)
@@ -54,8 +69,14 @@ jobs:
   macos:
     name: macos (clang)
     runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
     steps:
     - uses: actions/checkout@v5
+    - name: install GoogleTest
+      run: brew install googletest
     - name: configure
       run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_BENCH=ON
     - name: build
@@ -75,11 +96,12 @@ jobs:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@v5
     - name: build the library
       run: |
-        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_TESTS=OFF
         cmake --build build --config Release --target allocator
     - name: pack
       shell: bash
@@ -102,6 +124,7 @@ jobs:
   tag:
     needs: package
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     outputs:
@@ -128,6 +151,7 @@ jobs:
     needs: tag
     if: needs.tag.outputs.new_tag != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     env:
