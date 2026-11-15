@@ -423,3 +423,26 @@ TEST(Regression, ArenaTooSmall)
     }
     EXPECT_TRUE(thrown);
 }
+
+// Block indices were "reused" on free, so two live blocks could share
+// an index and a smart pointer could follow the wrong descriptor.
+TEST(Regression, IndicesStayUnique)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer A = a.alloc(32), B = a.alloc(32), C = a.alloc(32);
+    a.free(B);
+    Pointer D = a.alloc(32); // goes into B's gap
+    a.free(D);               // was: max_index_ dropped to A's index
+    Pointer E = a.alloc(64);
+    Pointer F = a.alloc(64); // was: got the same index as C
+    Pointer G = a.alloc(64);
+    a.free(E);
+    a.free(G);
+
+    memset(C.get(), 'c', 32);
+    memset(F.get(), 'f', 64);
+    EXPECT_NE(C.get(), F.get());
+    EXPECT_EQ(static_cast<char*>(C.get())[0], 'c');
+    EXPECT_EQ(static_cast<char*>(F.get())[0], 'f');
+    (void)A;
+}
