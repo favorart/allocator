@@ -177,14 +177,12 @@ private:
     void del_block(Block* block);
     void check_owner(const Pointer& p) const;
 
-    AllocError err_;             ///< Prepared in advance, to throw without building a message.
-    AllocError foreign_;         ///< The same for a Pointer of another allocator.
-    unsigned char* memory_;      ///< Start of the data area (aligned).
-    std::size_t size_;           ///< Size of the managed area.
-    std::uint32_t blocks_count_; ///< Number of descriptors, the list head included.
-    Block* first_block_;         ///< List head: the highest descriptor, never moves.
-    Block* last_block_;          ///< The lowest descriptor.
-    std::uint64_t max_index_;    ///< The last index given out; indices only grow.
+    AllocError err_;          ///< Prepared in advance, to throw without building a message.
+    AllocError foreign_;      ///< The same for a Pointer of another allocator.
+    unsigned char* memory_;   ///< Start of the data area (aligned).
+    Block* first_block_;      ///< List head: the highest descriptor, never moves.
+    Block* last_block_;       ///< The lowest descriptor.
+    std::uint64_t max_index_; ///< The last index given out; indices only grow.
 };
 
 /**

@@ -30,8 +30,7 @@ constexpr std::size_t kMaxRequest = UINT32_MAX / 2;
 
 Allocator::Allocator(void* base, std::size_t size)
     : err_(NoMemory, "AllocError"), foreign_(InvalidFree, "Pointer of another allocator"),
-      memory_(nullptr), size_(0), blocks_count_(0), first_block_(nullptr), last_block_(nullptr),
-      max_index_(0)
+      memory_(nullptr), first_block_(nullptr), last_block_(nullptr), max_index_(0)
 {
     const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(base);
     const std::uintptr_t end = begin + size;
@@ -44,8 +43,7 @@ Allocator::Allocator(void* base, std::size_t size)
         throw err_;
 
     memory_ = reinterpret_cast<unsigned char*>(data);
-    size_ = static_cast<std::size_t>(head + sizeof(Block) - data);
-    std::memset(memory_, 0, size_);
+    std::memset(memory_, 0, static_cast<std::size_t>(head + sizeof(Block) - data));
 
     first_block_ = reinterpret_cast<Block*>(head);
     first_block_->pointer_ = nullptr;
@@ -55,7 +53,6 @@ Allocator::Allocator(void* base, std::size_t size)
     first_block_->next_ = nullptr;
 
     last_block_ = first_block_;
-    ++blocks_count_;
 }
 
 Pointer Allocator::alloc(std::size_t size)
@@ -172,7 +169,6 @@ Allocator::Block* Allocator::new_block(std::uint32_t size, unsigned char* ptr, B
     if (next)
         next->prev_ = block;
 
-    ++blocks_count_;
     return block;
 }
 
@@ -220,5 +216,4 @@ void Allocator::del_block(Block* block)
 
     std::memset(static_cast<void*>(last_block_), 0, sizeof(Block));
     ++last_block_;
-    --blocks_count_;
 }
