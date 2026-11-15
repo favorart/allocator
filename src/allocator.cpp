@@ -104,19 +104,14 @@ void Allocator::free(Pointer& p)
 
 void Allocator::defrag()
 {
-    Block *curr, *next;
-
-    curr = first_block_->next_;
-    next = curr->next_;
-
-    while (next >= last_block_) {
-        unsigned char* ptr = (curr->pointer_ + curr->size_);
-        if (next->pointer_ != ptr) {
-            std::memmove(ptr, next->pointer_, next->size_);
-            next->pointer_ = ptr;
+    // the list is sorted by data address: slide every block down
+    unsigned char* end = memory_;
+    for (Block* curr = first_block_->next_; curr; curr = curr->next_) {
+        if (curr->pointer_ != end) {
+            std::memmove(end, curr->pointer_, curr->size_);
+            curr->pointer_ = end;
         }
-        curr = next;
-        next = next->next_;
+        end += curr->size_;
     }
 }
 
