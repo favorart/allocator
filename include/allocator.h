@@ -141,13 +141,14 @@ public:
 
 private:
     friend class Pointer;
+    friend struct AllocatorTestAccess; // the tests reach the index counter
 
     /** A block descriptor: a node of the address-sorted list. */
     struct Block
     {
         unsigned char* pointer_; ///< Data of the block.
         std::uint32_t size_;     ///< Size of the data, rounded up.
-        std::uint32_t index_;    ///< Unique id; 0 is the list head.
+        std::uint64_t index_;    ///< Unique id; 0 is the list head. 64-bit: never wraps.
         Block* prev_;
         Block* next_;
     };
@@ -183,7 +184,7 @@ private:
     std::uint32_t blocks_count_; ///< Number of descriptors, the list head included.
     Block* first_block_;         ///< List head: the highest descriptor, never moves.
     Block* last_block_;          ///< The lowest descriptor.
-    std::uint32_t max_index_;    ///< The last index given out; indices only grow.
+    std::uint64_t max_index_;    ///< The last index given out; indices only grow.
 };
 
 /**
@@ -222,7 +223,7 @@ private:
 
     mutable Allocator::Block* block_ = nullptr; ///< The slot seen last.
     const Allocator* owner_ = nullptr;
-    std::uint32_t block_index_ = 0;
+    std::uint64_t block_index_ = 0;
 };
 
 inline Allocator::Block* Pointer::find() const

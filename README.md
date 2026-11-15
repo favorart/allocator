@@ -171,9 +171,8 @@ and link the `allocator` CMake target.
   `realloc()` that moves the block: after it only the `Pointer` passed to
   `realloc()` is valid, the copies resolve to `nullptr`.
 - Blocks are raw bytes: no constructors or destructors are run.
-- Block indices are 32-bit; after 2³² allocations they wrap around.
 - A single request is limited to 2 GiB; every block is rounded up to
-  `alignof(std::max_align_t)` (16 bytes with GCC/Clang on x86-64, 8 with MSVC); one descriptor takes 32 bytes
+  `alignof(std::max_align_t)` (16 bytes with GCC/Clang on x86-64, 8 with MSVC); one descriptor takes 40 bytes
   on 64-bit platforms.
 - A `Pointer` belongs to the allocator that created it (`free()` or
   `realloc()` of it elsewhere throws `AllocError(InvalidFree)`) and must not
@@ -196,6 +195,7 @@ one of them. Running them as real tests under ASan/UBSan found:
 | `realloc()` shrink with an adjacent neighbour | moved the block and copied the old size into the smaller one | in place whenever it fits; copy only when growing |
 | descriptors at `base + size - sizeof(Block)`, data at any offset | misaligned access (UB) | aligned descriptor array and data blocks |
 | `AllocError` inherited `std::runtime_error` privately | not catchable as `std::exception` | public inheritance |
+| block indices were 32-bit | after 2³² allocations a new block took a live block's index: a `Pointer` could resolve to the wrong block | 64-bit indices (a descriptor is 40 bytes instead of 32) |
 | `free()`/`realloc()` of a `Pointer` of another allocator | the block was looked up there and unlinked here: both allocators corrupted | throws `AllocError(InvalidFree)` |
 | `Allocator` was copyable | a copy and the original handed out the same memory twice | not copyable or movable; `Allocator` and `Pointer` are `final` |
 
