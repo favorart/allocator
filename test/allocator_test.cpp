@@ -511,3 +511,45 @@ TEST(Regression, DefragEmptyAndHead)
     Pointer C = a.alloc(100);
     EXPECT_EQ(C.get(), start);
 }
+
+// Shrinking a block with an adjacent neighbour moved it and
+// copied the old (larger) size into the new, smaller block.
+TEST(Regression, ReallocShrinkWithNeighbour)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(256);
+    Pointer p2 = a.alloc(256);
+    writeTo(p, 256);
+    writeTo(p2, 256);
+
+    void* ptr = p.get();
+    a.realloc(p, 64);
+    EXPECT_EQ(p.get(), ptr);
+    EXPECT_TRUE(isDataOk(p, 64));
+    EXPECT_TRUE(isDataOk(p2, 256));
+}
+
+// Growing in place only needs (new_size - size) free bytes after the block.
+TEST(Regression, ReallocGrowIntoExactGap)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(64);
+    Pointer g = a.alloc(64);
+    Pointer p2 = a.alloc(64);
+    writeTo(p, 64);
+    a.free(g);
+
+    void* ptr = p.get();
+    a.realloc(p, 128);
+    EXPECT_EQ(p.get(), ptr);
+    EXPECT_TRUE(isDataOk(p, 64));
+    (void)p2;
+}
+
+TEST(Regression, ReallocToZeroFrees)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(64);
+    a.realloc(p, 0);
+    EXPECT_EQ(p.get(), nullptr);
+}
