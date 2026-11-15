@@ -1,46 +1,47 @@
 #include "allocator.h"
 
-#include <cstdio>
+#include <gtest/gtest.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <set>
 #include <vector>
 
-//#include "gtest/gtest.h"
+/*
+ * The course's original test suite, written for GoogleTest.
+ */
+
 using namespace std;
-char buf[65536];
 
-int myprint(char* err)
-{
-    printf(err);
-    return 0;
-}
+//-----------------------------------------
+// Expects `expr` to throw AllocError of the given type.
+#define EXPECT_ALLOC_ERROR(expr, errtype)                                                          \
+    do {                                                                                           \
+        bool thrown_ = false;                                                                      \
+        try {                                                                                      \
+            expr;                                                                                  \
+        } catch (AllocError & e_) {                                                                \
+            thrown_ = (e_.getType() == errtype);                                                   \
+        }                                                                                          \
+        EXPECT_TRUE(thrown_) << "expected AllocError(" #errtype "): " #expr;                       \
+    } while (0)
 
-// TEST (Allocator, AllocInRange)
-void AllocInRange()
-{
-    Allocator a(buf, sizeof(buf));
-    int size = 500;
-
-    Pointer p = a.alloc(size);
-    char* v = reinterpret_cast<char*>(p.get());
-
-    if (v > buf && (v + size) < (buf + sizeof(buf)))
-        myprint("Error");
-
-    a.free(p);
-}
+//-----------------------------------------
+alignas(std::max_align_t) static char buf[65536];
 
 static void writeTo(Pointer& p, size_t size)
 {
     char* v = reinterpret_cast<char*>(p.get());
-    for (std::uint32_t i = 0; i < size; i++)
-        v[i] = i % 31;
+    for (size_t i = 0; i < size; i++)
+        v[i] = static_cast<char>(i % 31);
 }
 static bool isDataOk(Pointer& p, size_t size)
 {
     char* v = reinterpret_cast<char*>(p.get());
-    for (std::uint32_t i = 0; i < size; i++) {
-        if (v[i] != i % 31)
+    for (size_t i = 0; i < size; i++) {
+        if (v[i] != static_cast<char>(i % 31))
             return false;
     }
     return true;
@@ -48,13 +49,13 @@ static bool isDataOk(Pointer& p, size_t size)
 static bool isValidMemory(Pointer& p, size_t allocatedSize)
 {
     char* v = reinterpret_cast<char*>(p.get());
-    return (v >= buf && v + allocatedSize < buf + sizeof(buf));
+    return (v >= buf && v + allocatedSize <= buf + sizeof(buf));
 }
 static bool fillUp(Allocator& a, size_t allocSize, vector<Pointer>& out)
 {
-    int Max = (2 * sizeof(buf) / allocSize); // To avoid creating an infinite loop.
+    size_t Max = (2 * sizeof(buf) / allocSize); // To avoid creating an infinite loop.
 
-    for (int i = 0; i < Max; i++)
+    for (size_t i = 0; i < Max; i++)
         try {
             out.push_back(a.alloc(allocSize));
             writeTo(out.back(), allocSize);
@@ -65,8 +66,23 @@ static bool fillUp(Allocator& a, size_t allocSize, vector<Pointer>& out)
     return false;
 }
 
-// TEST (Allocator, AllocReadWrite)
-void AllocReadWrite()
+//=========================================
+// Original course tests
+//=========================================
+TEST(Allocator, AllocInRange)
+{
+    Allocator a(buf, sizeof(buf));
+    size_t size = 500;
+
+    Pointer p = a.alloc(size);
+    char* v = reinterpret_cast<char*>(p.get());
+
+    EXPECT_TRUE(v >= buf && (v + size) <= (buf + sizeof(buf)));
+
+    a.free(p);
+}
+
+TEST(Allocator, AllocReadWrite)
 {
     Allocator a(buf, sizeof(buf));
 
@@ -74,102 +90,68 @@ void AllocReadWrite()
     size_t size = 300;
     for (int i = 0; i < 20; i++) {
         ptr.push_back(a.alloc(size));
-
-        if (!isValidMemory(ptr.back(), size))
-            myprint("error");
+        EXPECT_TRUE(isValidMemory(ptr.back(), size));
         writeTo(ptr.back(), size);
     }
 
-    // FILE *f = fopen ("fff.txt", "w");
-    // int i = 0;
-    // for ( Pointer &p : ptr )
-    // {
-    //  fmyprint (f, "\ni=%d ptr=%d", i++, p.get ());
-    // }
-    // fmyprint (f, "\n");
-    // fclose (f);
-
-    for (Pointer& p : ptr) {
-        if (!isDataOk(p, size))
-            myprint("error");
-    }
-
-    // f = fopen ("free.txt", "w");
-    // int j = 0;
     for (Pointer& p : ptr)
-    // for ( int i = 0; i < 20; i++ )
-    {
-        // myprint ("\ni=%d ptr=%d", j, ptr[i].get ());
-        // fmyprint (f, "\ni=%d p.get=%d" /*ptr=%d"*/, j, /*p.get (),*/ ptr[i].get ());
-        // j++;
+        EXPECT_TRUE(isDataOk(p, size));
+
+    for (Pointer& p : ptr)
         a.free(p);
-    }
-    // fmyprint (f, "\n");
-    // fclose (f);
 }
 
-// TEST (Allocator, AllocNoMem)
-void AllocNoMem()
+TEST(Allocator, AllocNoMem)
 {
     Allocator a(buf, sizeof(buf));
     size_t size = sizeof(buf) / 5;
 
     vector<Pointer> ptr;
+    bool thrown = false;
     try {
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 6; i++)
             ptr.push_back(a.alloc(size));
-        }
-
-        int i = 0;
-        // EXPECT_TRUE(false);
     } catch (AllocError& e) {
-        if (e.getType() != AllocErrorType::NoMemory)
-            myprint("Error");
+        thrown = true;
+        EXPECT_EQ(e.getType(), AllocErrorType::NoMemory);
     }
+    EXPECT_TRUE(thrown);
 
-    for (Pointer& p : ptr) {
+    for (Pointer& p : ptr)
         a.free(p);
-    }
 }
 
-// TEST (Allocator, AllocReuse)
-void AllocReuse()
+TEST(Allocator, AllocReuse)
 {
     Allocator a(buf, sizeof(buf));
 
     vector<Pointer> ptrs;
-    int size = 135;
+    size_t size = 135;
 
-    if (!fillUp(a, size, ptrs))
-        myprint("Error");
+    EXPECT_TRUE(fillUp(a, size, ptrs));
     a.free(ptrs[1]);
 
-    if (ptrs[1].get() != nullptr)
-        myprint("Error");
+    EXPECT_EQ(ptrs[1].get(), nullptr);
     ptrs[1] = a.alloc(size);
 
-    if (ptrs[1].get() == nullptr)
-        myprint("Error");
+    EXPECT_NE(ptrs[1].get(), nullptr);
     writeTo(ptrs[1], size);
 
     for (Pointer& p : ptrs) {
-        if (!isDataOk(p, size))
-            myprint("Error");
+        EXPECT_TRUE(isDataOk(p, size));
         a.free(p);
     }
 }
 
-// TEST (Allocator, DefragMove)
-void DefragMove()
+TEST(Allocator, DefragMove)
 {
     Allocator a(buf, sizeof(buf));
 
     set<void*> initialPtrs;
     vector<Pointer> ptrs;
-    int size = 135;
+    size_t size = 135;
 
-    if (!fillUp(a, size, ptrs))
-        myprint("Error");
+    EXPECT_TRUE(fillUp(a, size, ptrs));
     a.free(ptrs[1]);
     a.free(ptrs[10]);
     a.free(ptrs[15]);
@@ -180,40 +162,32 @@ void DefragMove()
 
     for (Pointer& p : ptrs) {
         auto r = initialPtrs.insert(p.get());
-        // Ensure inserted a new element.
-        if (!r.second)
-            myprint("Error");
+        EXPECT_TRUE(r.second); // Ensure inserted a new element.
     }
 
     a.defrag();
 
     bool moved = false;
     for (Pointer& p : ptrs) {
-        if (!isDataOk(p, size))
-            myprint("Error");
+        EXPECT_TRUE(isDataOk(p, size));
         moved = (moved || initialPtrs.find(p.get()) == initialPtrs.end());
     }
-
-    if (!moved)
-        myprint("Error");
+    EXPECT_TRUE(moved);
 
     for (Pointer& p : ptrs) {
-        if (!isDataOk(p, size))
-            myprint("Error");
+        EXPECT_TRUE(isDataOk(p, size));
         a.free(p);
     }
 }
 
-// TEST (Allocator, DefragMoveTwice)
-void DefragMoveTwice()
+TEST(Allocator, DefragMoveTwice)
 {
     Allocator a(buf, sizeof(buf));
 
     vector<Pointer> ptrs;
-    int size = 225;
+    size_t size = 225;
 
-    if (!fillUp(a, size, ptrs))
-        myprint("Error");
+    EXPECT_TRUE(fillUp(a, size, ptrs));
 
     a.free(ptrs[1]);
     a.free(ptrs[10]);
@@ -231,22 +205,19 @@ void DefragMoveTwice()
     writeTo(ptrs.back(), size);
 
     for (Pointer& p : ptrs) {
-        if (!isDataOk(p, size))
-            myprint("Error");
+        EXPECT_TRUE(isDataOk(p, size));
         a.free(p);
     }
 }
 
-// TEST (Allocator, DefragAvailable)
-void DefragAvailable()
+TEST(Allocator, DefragAvailable)
 {
     Allocator a(buf, sizeof(buf));
 
     vector<Pointer> ptrs;
-    int size = 135;
+    size_t size = 135;
 
-    if (!fillUp(a, size, ptrs))
-        myprint("Error");
+    EXPECT_TRUE(fillUp(a, size, ptrs));
 
     a.free(ptrs[1]);
     a.free(ptrs[10]);
@@ -260,7 +231,7 @@ void DefragAvailable()
         Pointer p = a.alloc(size * 2);
         a.free(p);
 
-        cerr << "WARNING: Allocator not fragmented initially. Defrag tests are inconclusive."
+        cerr << "  WARNING: Allocator not fragmented initially. Defrag tests are inconclusive."
              << endl;
     } catch (AllocError&) {
     }
@@ -270,25 +241,22 @@ void DefragAvailable()
     writeTo(newPtr, size * 2);
 
     for (Pointer& p : ptrs) {
-        if (!isDataOk(p, size))
-            myprint("Error");
+        EXPECT_TRUE(isDataOk(p, size));
         a.free(p);
     }
 }
 
-// TEST (Allocator, ReallocFromEmpty)
-void ReallocFromEmpty()
+TEST(Allocator, ReallocFromEmpty)
 {
     Allocator a(buf, sizeof(buf));
 
-    int size = 81;
+    size_t size = 81;
 
     Pointer p;
     Pointer p1 = a.alloc(size);
 
     a.realloc(p, size);
-    if (p.get() == nullptr)
-        myprint("Error");
+    EXPECT_NE(p.get(), nullptr);
 
     Pointer p2 = a.alloc(size);
 
@@ -296,82 +264,68 @@ void ReallocFromEmpty()
     writeTo(p1, size);
     writeTo(p2, size);
 
-    if (!isDataOk(p, size))
-        myprint("Error");
-    if (!isDataOk(p1, size))
-        myprint("Error");
-    if (!isDataOk(p2, size))
-        myprint("Error");
+    EXPECT_TRUE(isDataOk(p, size));
+    EXPECT_TRUE(isDataOk(p1, size));
+    EXPECT_TRUE(isDataOk(p2, size));
 
     a.free(p);
     a.free(p1);
     a.free(p2);
 }
 
-// TEST (Allocator, ReallocGrowInplace)
-void ReallocGrowInplace()
+TEST(Allocator, ReallocGrowInplace)
 {
     Allocator a(buf, sizeof(buf));
 
-    int size = 135;
+    size_t size = 135;
     Pointer p = a.alloc(size);
     writeTo(p, size);
 
     void* ptr = p.get();
     a.realloc(p, size * 2);
 
-    if (p.get() != ptr)
-        myprint("Error");
-    if (!isDataOk(p, size))
-        myprint("Error");
+    EXPECT_EQ(p.get(), ptr);
+    EXPECT_TRUE(isDataOk(p, size));
 
     Pointer p2 = a.alloc(size);
     writeTo(p, size * 2);
     writeTo(p2, size);
 
-    if (!isDataOk(p, size * 2))
-        myprint("Error");
-    if (!isDataOk(p2, size))
-        myprint("Error");
+    EXPECT_TRUE(isDataOk(p, size * 2));
+    EXPECT_TRUE(isDataOk(p2, size));
 
     a.free(p);
     a.free(p2);
 }
 
-// TEST (Allocator, ReallocShrink)
-void ReallocShrink()
+TEST(Allocator, ReallocShrink)
 {
     Allocator a(buf, sizeof(buf));
 
-    int size = 135;
+    size_t size = 135;
     Pointer p = a.alloc(size);
     writeTo(p, size);
 
     void* ptr = p.get();
     a.realloc(p, size / 2);
 
-    if (p.get() != ptr)
-        myprint("Error");
+    EXPECT_EQ(p.get(), ptr);
 
     Pointer p2 = a.alloc(size);
     writeTo(p2, size);
 
-    if (!isDataOk(p, size / 2))
-        myprint("Error");
-
-    if (!isDataOk(p2, size))
-        myprint("Error");
+    EXPECT_TRUE(isDataOk(p, size / 2));
+    EXPECT_TRUE(isDataOk(p2, size));
 
     a.free(p);
     a.free(p2);
 }
 
-// TEST (Allocator, ReallocGrow)
-void ReallocGrow()
+TEST(Allocator, ReallocGrow)
 {
     Allocator a(buf, sizeof(buf));
 
-    int size = 135;
+    size_t size = 135;
     Pointer p = a.alloc(size);
     Pointer p2 = a.alloc(size);
 
@@ -381,19 +335,15 @@ void ReallocGrow()
     void* ptr = p.get();
     a.realloc(p, size * 2);
 
-    if (p.get() == ptr) {
-        cerr << "WARNING: Reallocated chunk was not moved. realloc() grow tests inconclusive."
+    if (p.get() == ptr)
+        cerr << "  WARNING: Reallocated chunk was not moved. realloc() grow tests inconclusive."
              << endl;
-    }
 
-    if (!isDataOk(p, size))
-        myprint("Error");
+    EXPECT_TRUE(isDataOk(p, size));
     writeTo(p, size * 2);
 
-    if (!isDataOk(p, size * 2))
-        myprint("Error");
-    if (!isDataOk(p2, size))
-        myprint("Error");
+    EXPECT_TRUE(isDataOk(p, size * 2));
+    EXPECT_TRUE(isDataOk(p2, size));
 
     a.free(p);
     a.free(p2);

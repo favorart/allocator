@@ -21,6 +21,8 @@ jobs:
       CXX: ${{ matrix.cxx }}
     steps:
     - uses: actions/checkout@v5
+    - name: install GoogleTest
+      run: sudo apt-get update && sudo apt-get install -y libgtest-dev
     - name: build
       run: make all
     - name: tests

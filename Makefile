@@ -12,7 +12,9 @@ BUILD := build
 LIB   := src/allocator.cpp
 HDRS  := include/allocator.h
 INC   := -Iinclude
-TESTS := test/main.cpp test/allocator_test.cpp
+TESTS := test/allocator_test.cpp
+# GoogleTest: libgtest-dev (Debian/Ubuntu), googletest (Homebrew)
+GTEST ?= -lgtest_main -lgtest -pthread
 
 .PHONY: all test clean
 all: $(BUILD)/allocator_test
@@ -21,7 +23,7 @@ $(BUILD):
 	mkdir -p $@
 
 $(BUILD)/allocator_test: $(TESTS) $(LIB) $(HDRS) | $(BUILD)
-	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) $(TESTS) $(LIB) -o $@
+	$(CXX) $(CXXSTD) $(WARN) $(CXXFLAGS) $(INC) $(TESTS) $(LIB) $(GTEST) -o $@
 
 test: $(BUILD)/allocator_test
 	./$(BUILD)/allocator_test
