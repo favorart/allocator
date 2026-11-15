@@ -70,7 +70,7 @@ jobs:
       shell: bash
       run: |
         mkdir -p pkg/include pkg/lib
-        cp allocator.h pkg/include/
+        cp include/allocator.h pkg/include/
         cp LICENSE README.md pkg/
         find build -maxdepth 2 -type f \( -name liballocator.a -o -name allocator.lib \) -exec cp {} pkg/lib/ \;
         test -n "$(ls pkg/lib)"
