@@ -92,7 +92,7 @@ private:
     Block* tail_block() const;
     Block* new_block(std::uint32_t size, unsigned char* ptr, Block* prev, Block* next);
     Block* put_block(std::size_t size);
-    int del_block(Block* block);
+    void del_block(Block* block);
 
     AllocError err_;             /* to avoid the call new */
     unsigned char* memory_;      /* start of the data area (aligned) */
@@ -100,7 +100,7 @@ private:
     std::uint32_t blocks_count_; /* quantity of blocks */
     Block* first_block_;
     Block* last_block_;
-    std::uint32_t max_index_; /* to detect collisions and make corrections of smart pointers */
+    std::uint32_t max_index_; /* the last index given out; indices only grow */
 };
 
 class Pointer

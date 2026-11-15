@@ -131,13 +131,17 @@ Allocator::Block* Allocator::tail_block() const
 Allocator::Block* Allocator::new_block(std::uint32_t size, unsigned char* ptr, Block* prev,
                                        Block* next)
 {
-    /* Block always appears in the place of last one */
+    // a new descriptor always takes the slot below the lowest one
     Block* block = --last_block_;
 
-    /* Fill the Block structure */
+    // a smart pointer finds its block by the index, so two live blocks
+    // must never share one (0 is the list head)
+    if (++max_index_ == 0)
+        ++max_index_;
+
     block->pointer_ = ptr;
-    block->index_ = ++max_index_;
     block->size_ = size;
+    block->index_ = max_index_;
     block->prev_ = prev;
     block->next_ = next;
 
@@ -171,36 +175,28 @@ Allocator::Block* Allocator::put_block(std::size_t size)
     return nullptr;
 }
 
-int Allocator::del_block(Block* block)
+void Allocator::del_block(Block* block)
 {
-    if (!block || blocks_count_ <= 1)
-        return 1;
+    if (!block || block == first_block_)
+        return;
 
-    /* keep the max index small while the list is short */
-    if (block->index_ == max_index_)
-        max_index_ = block->prev_->index_;
-
-    /* unlink the element from the list */
+    // unlink
     if (block->next_)
         block->next_->prev_ = block->prev_;
     if (block->prev_)
         block->prev_->next_ = block->next_;
 
-    /* if it is not a last element:
-     * replace the last one into given,
-     * to keep the list without holes in memory
-     */
-    if (block->index_ != last_block_->index_) {
+    // keep the descriptor array dense: move the lowest descriptor
+    // into the hole (descriptors only move up)
+    if (block != last_block_) {
         *block = *last_block_;
-
         if (block->prev_)
             block->prev_->next_ = block;
         if (block->next_)
             block->next_->prev_ = block;
     }
-    /* remove the last element */
-    std::memset(last_block_, 0, sizeof(Block));
+
+    std::memset(static_cast<void*>(last_block_), 0, sizeof(Block));
     ++last_block_;
     --blocks_count_;
-    return 0;
 }
