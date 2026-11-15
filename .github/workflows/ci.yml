@@ -27,6 +27,11 @@ jobs:
       run: make all
     - name: tests
       run: make test
+    - name: tests under ASan + UBSan
+      # ASan of older clang crashes at startup with high ASLR entropy (kernel 6.x)
+      run: |
+        sudo sysctl -w vm.mmap_rnd_bits=28
+        make sanitize
 
   windows:
     name: windows (msvc)
