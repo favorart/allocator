@@ -490,6 +490,32 @@ TEST(Regression, ForeignPointerIsRejected)
     EXPECT_TRUE(isDataOk(b2, 64));
 }
 
+struct AllocatorTestAccess
+{
+    static uint64_t maxIndex(const Allocator& a) { return a.max_index_; }
+    static void setMaxIndex(Allocator& a, uint64_t index) { a.max_index_ = index; }
+};
+
+// Indices were 32-bit: 2^32 allocations later a new block took the index of
+// a live one, and a smart pointer scanning from its old slot found the new
+// block instead of its own.
+TEST(Regression, IndicesDoNotWrapAround)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer P = a.alloc(64), Q = a.alloc(64);
+    memset(Q.get(), 'q', 64);
+    a.free(P); // Q's descriptor moves up; Q still remembers its old slot
+
+    // 2^32 - 1 allocations later the next index is Q's one plus 2^32
+    AllocatorTestAccess::setMaxIndex(a, AllocatorTestAccess::maxIndex(a) + UINT32_MAX);
+    Pointer Z = a.alloc(64); // takes Q's old slot
+    memset(Z.get(), 'z', 64);
+
+    EXPECT_NE(Q.get(), Z.get());
+    EXPECT_EQ(static_cast<char*>(Q.get())[0], 'q');
+    EXPECT_EQ(static_cast<char*>(Z.get())[0], 'z');
+}
+
 // A copy of a freed smart pointer must resolve to nullptr.
 TEST(Regression, StaleCopyIsNull)
 {
@@ -525,8 +551,8 @@ TEST(Regression, CachedSlotReusedByData)
         } catch (AllocError&) {
         }
     EXPECT_NE(big.get(), nullptr);
-    uint32_t* w = static_cast<uint32_t*>(big.get());
-    for (size_t i = 0; i < big_size / sizeof(uint32_t); ++i)
+    uint64_t* w = static_cast<uint64_t*>(big.get());
+    for (size_t i = 0; i < big_size / sizeof(uint64_t); ++i)
         w[i] = 3; // X's index everywhere
 
     EXPECT_EQ(X.get(), x);
