@@ -149,11 +149,32 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
+  # Coverage-guided random operations against a model (fuzz/allocator_fuzz.cpp)
+  fuzz:
+    name: fuzz (libFuzzer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v7
+    - name: fuzz for 60 s
+      run: |
+        sudo sysctl -w vm.mmap_rnd_bits=28
+        make -j fuzz FUZZ_SECONDS=60
+    - uses: actions/upload-artifact@v7
+      if: failure()
+      with:
+        name: fuzz-crash
+        path: |
+          crash-*
+          leak-*
+          timeout-*
+        retention-days: 7
+
   # Tag the master commit with the next patch version: v0.0.1, v0.0.2, ...
   # A minor or major bump is a tag pushed by hand; the numbering continues from it.
   tag:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [ linux, windows, macos ]
+    needs: [ linux, windows, macos, fuzz ]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

@@ -32,3 +32,9 @@ build/
 cmake-build-*/
 out/
 .vs/
+
+# libFuzzer findings
+crash-*
+leak-*
+timeout-*
+oom-*
