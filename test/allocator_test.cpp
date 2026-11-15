@@ -495,6 +495,8 @@ struct AllocatorTestAccess
 {
     static uint64_t maxIndex(const Allocator& a) { return a.max_index_; }
     static void setMaxIndex(Allocator& a, uint64_t index) { a.max_index_ = index; }
+    static Allocator::Block* lowest(Allocator& a) { return a.last_block_; }
+    static Allocator::Block* highest(Allocator& a) { return a.first_block_ - 1; }
 };
 
 // Indices were 32-bit: 2^32 allocations later a new block took the index of
@@ -981,6 +983,56 @@ INSTANTIATE_TEST_SUITE_P(OffsetsAndSizes, UnalignedArena,
                                                                      2 * alignof(std::max_align_t)),
                                             ::testing::Values<size_t>(256, 1000, 4093)));
 
+//---- Allocator::check -------------------
+TEST(Check, ConsistentThroughTheApi)
+{
+    Allocator a(buf, 4096);
+    EXPECT_TRUE(a.check());
+    vector<Pointer> ptrs;
+    fillUp(a, 48, ptrs);
+    EXPECT_TRUE(a.check());
+    for (size_t i = 0; i < ptrs.size(); i += 3)
+        a.free(ptrs[i]);
+    EXPECT_TRUE(a.check());
+    a.realloc(ptrs[1], 16); // the arena is full: shrink in place
+    EXPECT_TRUE(a.check());
+    a.defrag();
+    EXPECT_TRUE(a.check());
+}
+
+TEST(Check, FindsBrokenInvariants)
+{
+    auto fresh = [](Allocator& a) {
+        Pointer p = a.alloc(64), q = a.alloc(64), r = a.alloc(64);
+        (void)p, (void)q, (void)r;
+    };
+    using Access = AllocatorTestAccess;
+    {
+        Allocator a(buf, 4096);
+        fresh(a);
+        Access::lowest(a)->index_ = Access::highest(a)->index_; // duplicate index
+        EXPECT_FALSE(a.check());
+    }
+    {
+        Allocator a(buf, 4096);
+        fresh(a);
+        Access::highest(a)->size_ += 16; // overlaps the next block
+        EXPECT_FALSE(a.check());
+    }
+    {
+        Allocator a(buf, 4096);
+        fresh(a);
+        Access::lowest(a)->pointer_ += 1; // misaligned
+        EXPECT_FALSE(a.check());
+    }
+    {
+        Allocator a(buf, 4096);
+        fresh(a);
+        Access::lowest(a)->prev_->next_ = nullptr; // a slot out of the list
+        EXPECT_FALSE(a.check());
+    }
+}
+
 //---- Pointer -----------------------------
 TEST(Pointer, DefaultIsNull)
 {
@@ -1090,6 +1142,7 @@ TEST(Stress, RandomOpsAgainstModel)
             } else
                 a.defrag();
 
+            ASSERT_TRUE(a.check());
             for (Live& l : live)
                 if (!ok(l, l.size)) {
                     ADD_FAILURE() << "live block corrupted";
@@ -1144,6 +1197,7 @@ TEST(Stress, CopiesFollowTheirBlock)
             } else
                 a.defrag();
 
+            ASSERT_TRUE(a.check());
             for (Live& l : live)
                 ASSERT_EQ(l.copy.get(), l.p.get());
             for (Pointer& d : dead)

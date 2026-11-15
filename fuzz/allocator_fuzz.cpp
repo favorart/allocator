@@ -1,8 +1,9 @@
 /*
  * libFuzzer target: the input is decoded into an arena and a sequence of
  * alloc / free / realloc / defrag operations, checked against a model.
- * Any corrupted byte, a lost block, a stale copy that still resolves or
- * a block outside the arena aborts; ASan and UBSan catch the rest.
+ * Any corrupted byte, a lost block, a stale copy that still resolves,
+ * a block outside the arena or a broken invariant (Allocator::check())
+ * aborts; ASan and UBSan catch the rest.
  *
  * Build and run: `make fuzz` (clang++), FUZZ_SECONDS=<n>.
  */
@@ -125,6 +126,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
             a->defrag();
         }
 
+        check(a->check());
         for (const Live& l : live)
             check(intact(l, l.size) && l.copy.get() == l.p.get());
         for (const Pointer& d : dead)
