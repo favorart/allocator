@@ -9,6 +9,11 @@
  *                                   ^
  */
 
+namespace {
+/* the largest request that still fits Block::size_ after rounding up */
+constexpr std::size_t kMaxRequest = UINT32_MAX / 2;
+} // namespace
+
 Allocator::Allocator(void* base, std::size_t size)
     : err_(NoMemory, "AllocError"), memory_(nullptr), size_(0), blocks_count_(0),
       first_block_(nullptr), last_block_(nullptr), max_index_(0)
@@ -41,10 +46,10 @@ Allocator::Allocator(void* base, std::size_t size)
 
 Pointer Allocator::alloc(std::size_t size)
 {
-    if (!size)
+    if (!size || size > kMaxRequest)
         throw err_;
 
-    Block* block = put_block(static_cast<std::uint32_t>(round_up(size)));
+    Block* block = put_block(round_up(size));
     if (!block)
         throw err_;
 
@@ -115,6 +120,14 @@ void Allocator::defrag()
     }
 }
 
+Allocator::Block* Allocator::tail_block() const
+{
+    Block* curr = first_block_;
+    while (curr->next_)
+        curr = curr->next_;
+    return curr;
+}
+
 Allocator::Block* Allocator::new_block(std::uint32_t size, unsigned char* ptr, Block* prev,
                                        Block* next)
 {
@@ -128,40 +141,32 @@ Allocator::Block* Allocator::new_block(std::uint32_t size, unsigned char* ptr, B
     block->prev_ = prev;
     block->next_ = next;
 
+    if (prev)
+        prev->next_ = block;
+    if (next)
+        next->prev_ = block;
+
     ++blocks_count_;
     return block;
 }
 
-Allocator::Block* Allocator::put_block(std::uint32_t size)
+Allocator::Block* Allocator::put_block(std::size_t size)
 {
-    Block* curr = first_block_->next_;
-    if (!curr) { /* Checking free head */
-        curr = new_block(size, memory_, first_block_, nullptr);
-        first_block_->next_ = curr;
-        return curr;
+    Block* tail = tail_block();
+    // any new block needs room for one more descriptor
+    if (tail_room(end_of(tail)) < sizeof(Block))
+        return nullptr;
+
+    // first fit; the gap before the first block counts too
+    for (Block* curr = first_block_; curr->next_; curr = curr->next_) {
+        unsigned char* ptr = end_of(curr);
+        if (static_cast<std::size_t>(curr->next_->pointer_ - ptr) >= size)
+            return new_block(static_cast<std::uint32_t>(size), ptr, curr, curr->next_);
     }
 
-    Block* next = curr->next_;
-    while (next) {
-        unsigned char* ptr = (curr->pointer_ + curr->size_);
-        /* first fit */
-        if ((std::uint32_t)(next->pointer_ - ptr) >= size) {
-            Block* block = new_block(size, ptr, curr, next);
-            next->prev_ = curr->next_ = block;
-            return block;
-        }
-        curr = next;
-        next = next->next_;
-    }
-
-    /* Checking free tail */
-    unsigned char* tail = (curr->pointer_ + curr->size_);
-    /* -1U: reserve the place for one more descriptor */
-    if ((std::uint32_t)(((unsigned char*)(last_block_ - 1U)) - tail) >= size) {
-        Block* block = new_block(size, tail, curr, nullptr);
-        curr->next_ = block;
-        return block;
-    }
+    // the free tail
+    if (tail_room(end_of(tail)) - sizeof(Block) >= size)
+        return new_block(static_cast<std::uint32_t>(size), end_of(tail), tail, nullptr);
 
     return nullptr;
 }
