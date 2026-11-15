@@ -348,3 +348,37 @@ TEST(Allocator, ReallocGrow)
     a.free(p);
     a.free(p2);
 }
+
+//=========================================
+// Regression tests (2026 review)
+//=========================================
+
+// Descriptors were placed at (base + size - sizeof (Block)) without
+// alignment: misaligned access is UB (caught by UBSan).
+TEST(Regression, UnalignedArena)
+{
+    Allocator a(buf + 1, 4093);
+    vector<Pointer> ptrs;
+    for (size_t size : {1, 3, 17, 33, 65}) {
+        ptrs.push_back(a.alloc(size));
+        writeTo(ptrs.back(), size);
+        EXPECT_EQ(reinterpret_cast<uintptr_t>(ptrs.back().get()) % alignof(std::max_align_t), 0u);
+    }
+    a.free(ptrs[1]);
+    a.free(ptrs[3]);
+    a.defrag();
+    EXPECT_TRUE(isDataOk(ptrs[0], 1));
+    EXPECT_TRUE(isDataOk(ptrs[2], 17));
+    EXPECT_TRUE(isDataOk(ptrs[4], 65));
+}
+
+TEST(Regression, ArenaTooSmall)
+{
+    bool thrown = false;
+    try {
+        Allocator a(buf, 8);
+    } catch (AllocError& e) {
+        thrown = (e.getType() == NoMemory);
+    }
+    EXPECT_TRUE(thrown);
+}

@@ -10,12 +10,24 @@
  */
 
 Allocator::Allocator(void* base, std::size_t size)
-    : err_(NoMemory, "AllocError"), memory_((unsigned char*)base), size_(size), blocks_count_(0U),
-      max_index_(0U)
+    : err_(NoMemory, "AllocError"), memory_(nullptr), size_(0), blocks_count_(0),
+      first_block_(nullptr), last_block_(nullptr), max_index_(0)
 {
+    const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(base);
+    const std::uintptr_t end = begin + size;
+    // user blocks start aligned, the descriptors are aligned at the top
+    const std::uintptr_t data = (begin + kAlign - 1) / kAlign * kAlign;
+    if (!base || end < begin || end - begin < sizeof(Block))
+        throw err_;
+    const std::uintptr_t head = (end - sizeof(Block)) / alignof(Block) * alignof(Block);
+    if (head < data || head - data < kAlign)
+        throw err_;
+
+    memory_ = reinterpret_cast<unsigned char*>(data);
+    size_ = static_cast<std::size_t>(head + sizeof(Block) - data);
     std::memset(memory_, 0, size_);
 
-    first_block_ = (Block*)(memory_ + size_ - sizeof(Block));
+    first_block_ = reinterpret_cast<Block*>(head);
 
     first_block_->size_ = 0;
     first_block_->prev_ = nullptr;
@@ -32,7 +44,7 @@ Pointer Allocator::alloc(std::size_t size)
     if (!size)
         throw err_;
 
-    Block* block = put_block(size);
+    Block* block = put_block(static_cast<std::uint32_t>(round_up(size)));
     if (!block)
         throw err_;
 
@@ -44,6 +56,9 @@ Pointer Allocator::alloc(std::size_t size)
 
 void Allocator::realloc(Pointer& p, std::size_t new_size)
 {
+    // keep the following blocks aligned
+    new_size = round_up(new_size);
+
     Block *new_block = nullptr, *block = p.Block();
 
     if (block) {
