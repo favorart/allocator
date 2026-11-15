@@ -37,10 +37,13 @@ enum AllocErrorType
     NoMemory
 };
 
-class AllocError : std::runtime_error
+class AllocError : public std::runtime_error
 {
 public:
-    AllocError(AllocErrorType type, std::string message) : runtime_error(message), type_(type) {}
+    AllocError(AllocErrorType type, const std::string& message)
+        : std::runtime_error(message), type_(type)
+    {
+    }
 
     AllocErrorType getType() const { return type_; }
 
