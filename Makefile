@@ -5,7 +5,7 @@
 
 CXX      ?= g++
 CXXSTD   ?= -std=c++17
-WARN     := -Wall -Wextra
+WARN     := -Wall -Wextra -Wpedantic -Werror
 CXXFLAGS ?= -O2 -g
 
 BUILD := build
