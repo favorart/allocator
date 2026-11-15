@@ -18,9 +18,9 @@ FetchContent_Declare(googletest
 FetchContent_MakeAvailable(googletest)
 
 if(MSVC)
-  add_compile_options(/W4 /utf-8)
+  add_compile_options(/W4 /WX /utf-8)
 else()
-  add_compile_options(-Wall -Wextra)
+  add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()
 
 add_library(allocator STATIC src/allocator.cpp)

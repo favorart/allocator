@@ -23,7 +23,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: install GoogleTest
       run: sudo apt-get update && sudo apt-get install -y libgtest-dev
-    - name: build
+    - name: build (-Wall -Wextra -Wpedantic -Werror)
       run: make all
     - name: tests
       run: make test
@@ -35,7 +35,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: configure
       run: cmake -S . -B build
-    - name: build
+    - name: build (/W4 /WX)
       run: cmake --build build --config Release
     - name: tests
       run: ctest --test-dir build -C Release --output-on-failure
