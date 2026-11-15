@@ -446,3 +446,46 @@ TEST(Regression, IndicesStayUnique)
     EXPECT_EQ(static_cast<char*>(F.get())[0], 'f');
     (void)A;
 }
+
+// A copy of a freed smart pointer must resolve to nullptr.
+TEST(Regression, StaleCopyIsNull)
+{
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(64);
+    Pointer copy = p;
+    a.free(p);
+    EXPECT_EQ(copy.get(), nullptr);
+    Pointer q = a.alloc(64);
+    EXPECT_EQ(copy.get(), nullptr);
+    (void)q;
+}
+
+// A smart pointer remembers the descriptor slot it saw last. After frees
+// that slot may lie below the descriptor area and be overwritten by user
+// data; the search must not read it as a descriptor.
+TEST(Regression, CachedSlotReusedByData)
+{
+    Allocator a(buf, 1024);
+    Pointer A = a.alloc(64), B = a.alloc(64), X = a.alloc(64); // X: lowest descriptor
+    writeTo(X, 64);
+    void* x = X.get();
+    a.free(A); // X's descriptor moves up into A's slot
+    a.free(B); // X's cached slot is now two slots below the descriptor area
+
+    // the largest block that still goes to the tail: it covers X's old slot
+    Pointer big;
+    size_t big_size = 1024;
+    for (; big_size > 128; big_size -= 16)
+        try {
+            big = a.alloc(big_size);
+            break;
+        } catch (AllocError&) {
+        }
+    EXPECT_NE(big.get(), nullptr);
+    uint32_t* w = static_cast<uint32_t*>(big.get());
+    for (size_t i = 0; i < big_size / sizeof(uint32_t); ++i)
+        w[i] = 3; // X's index everywhere
+
+    EXPECT_EQ(X.get(), x);
+    EXPECT_TRUE(isDataOk(X, 64));
+}

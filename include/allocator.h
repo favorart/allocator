@@ -106,33 +106,40 @@ private:
 class Pointer
 {
 public:
-    Pointer() : block_(nullptr), first_(nullptr), block_index_(0) {}
-    Pointer(Allocator::Block* first) : block_(nullptr), first_(first), block_index_(0) {}
+    Pointer() = default;
 
     void* get() const
     {
-        block_ = Block();
-        return (block_) ? block_->pointer_ : nullptr;
+        block_ = find();
+        return block_ ? block_->pointer_ : nullptr;
     }
 
 private:
     friend class Allocator;
 
-    /* Correction of the smart pointer value */
-    Allocator::Block* Block() const
-    {
-        if (!block_)
-            return nullptr;
+    explicit Pointer(const Allocator* owner) : owner_(owner) {}
 
-        while (block_ != first_) {
-            if (block_->index_ == block_index_)
-                return block_;
-            ++block_;
-        }
-        return nullptr;
-    }
+    Allocator::Block* find() const;
 
-    mutable Allocator::Block* block_;
-    const Allocator::Block* first_;
-    std::uint32_t block_index_;
+    mutable Allocator::Block* block_ = nullptr; /* the slot seen last */
+    const Allocator* owner_ = nullptr;
+    std::uint32_t block_index_ = 0;
 };
+
+/* Descriptors only move up (towards the list head): scan from the slot seen last. */
+inline Allocator::Block* Pointer::find() const
+{
+    if (!block_ || !owner_)
+        return nullptr;
+
+    // slots below the descriptor array are free and may already hold user data
+    if (block_ < owner_->last_block_)
+        block_ = owner_->last_block_;
+
+    for (; block_ != owner_->first_block_; ++block_)
+        if (block_->index_ == block_index_)
+            return block_;
+
+    block_ = nullptr;
+    return nullptr;
+}
