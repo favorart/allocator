@@ -2,15 +2,20 @@
 
 #include <cstring>
 
-/*                                   v
+/*
  * +-------------+------------------------------------+
  * | EmptyHeader | Memory ... -->      <-- ... Blocks |
  * +-------------+------------------------------------+
- *                                   ^
+ *
+ * Invariants:
+ * - descriptors fill [last_block_, first_block_] without holes;
+ * - the list from first_block_ is sorted by data address;
+ * - a descriptor moves only up (towards first_block_), in del_block();
+ * - indices of live blocks are unique and only grow.
  */
 
 namespace {
-/* the largest request that still fits Block::size_ after rounding up */
+/** The largest request that still fits Block::size_ after rounding up. */
 constexpr std::size_t kMaxRequest = UINT32_MAX / 2;
 } // namespace
 
@@ -33,12 +38,11 @@ Allocator::Allocator(void* base, std::size_t size)
     std::memset(memory_, 0, size_);
 
     first_block_ = reinterpret_cast<Block*>(head);
-
+    first_block_->pointer_ = nullptr;
     first_block_->size_ = 0;
+    first_block_->index_ = 0;
     first_block_->prev_ = nullptr;
     first_block_->next_ = nullptr;
-    first_block_->index_ = 0;
-    first_block_->pointer_ = nullptr;
 
     last_block_ = first_block_;
     ++blocks_count_;
