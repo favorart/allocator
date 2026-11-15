@@ -12,7 +12,7 @@ BUILD := build
 LIB   := src/allocator.cpp
 HDRS  := include/allocator.h
 INC   := -Iinclude
-TESTS := test/main.cpp test/allocator_test.cpp
+TESTS := test/allocator_test.cpp
 
 .PHONY: all test clean
 all: $(BUILD)/allocator_test
