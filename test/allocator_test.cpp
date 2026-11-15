@@ -8,6 +8,7 @@
 #include <iostream>
 #include <random>
 #include <set>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -843,6 +844,46 @@ TEST(Realloc, GrowAtTheTailInPlace)
     EXPECT_TRUE(isDataOk(p, 30000));
 }
 
+TEST(Realloc, GrowToTheDescriptorsThenShrink)
+{
+    Allocator a(buf, 4096);
+    Pointer p = a.alloc(64);
+    writeTo(p, 64);
+    void* old = p.get();
+
+    // the largest in-place size: the data reaches the descriptor array
+    size_t top = 4096;
+    for (; top > 64; top -= 16)
+        try {
+            a.realloc(p, top);
+            break;
+        } catch (AllocError&) {
+        }
+    EXPECT_EQ(p.get(), old);
+    EXPECT_TRUE(isDataOk(p, 64));
+    EXPECT_ALLOC_ERROR(a.realloc(p, top + 16), NoMemory);
+    EXPECT_ALLOC_ERROR(a.alloc(1), NoMemory); // no room for one more descriptor
+
+    a.realloc(p, top / 2); // shrinking frees the tail again
+    EXPECT_EQ(p.get(), old);
+    Pointer q = a.alloc(64);
+    EXPECT_NE(q.get(), nullptr);
+}
+
+TEST(Realloc, StaleCopyAllocatesANewBlock)
+{
+    // a copy of a freed block is empty for realloc(), as for free()
+    Allocator a(buf, sizeof(buf));
+    Pointer p = a.alloc(64);
+    Pointer copy = p;
+    a.free(p);
+    a.realloc(copy, 32);
+    EXPECT_NE(copy.get(), nullptr);
+    EXPECT_EQ(p.get(), nullptr);
+    writeTo(copy, 32);
+    EXPECT_TRUE(isDataOk(copy, 32));
+}
+
 //---- Allocator::defrag ------------------
 TEST(Defrag, CompactsInAddressOrder)
 {
@@ -899,6 +940,46 @@ TEST(Defrag, IdempotentAndCopiesFollow)
     EXPECT_EQ(copy.get(), once);
     EXPECT_TRUE(isDataOk(copy, 100));
 }
+
+//---- Unaligned arenas -------------------
+// Every offset of the buffer start within two alignment units, a few sizes.
+class UnalignedArena : public ::testing::TestWithParam<std::tuple<size_t, size_t>>
+{
+};
+
+TEST_P(UnalignedArena, AlignedBlocksInsideTheBuffer)
+{
+    const size_t offset = std::get<0>(GetParam()), size = std::get<1>(GetParam());
+    char* const begin = buf + offset;
+    Allocator a(begin, size);
+
+    vector<Pointer> ptrs;
+    vector<size_t> sizes;
+    for (size_t n = 1;; n = n % 97 + 13) {
+        try {
+            ptrs.push_back(a.alloc(n));
+        } catch (AllocError&) {
+            break;
+        }
+        sizes.push_back(n);
+        char* v = static_cast<char*>(ptrs.back().get());
+        ASSERT_EQ(reinterpret_cast<uintptr_t>(v) % alignof(std::max_align_t), 0u);
+        ASSERT_TRUE(v >= begin && v + n <= begin + size);
+        writeTo(ptrs.back(), n);
+    }
+    ASSERT_FALSE(ptrs.empty());
+
+    for (size_t i = 0; i < ptrs.size(); i += 2)
+        a.free(ptrs[i]);
+    a.defrag();
+    for (size_t i = 1; i < ptrs.size(); i += 2)
+        EXPECT_TRUE(isDataOk(ptrs[i], sizes[i]));
+}
+
+INSTANTIATE_TEST_SUITE_P(OffsetsAndSizes, UnalignedArena,
+                         ::testing::Combine(::testing::Range<size_t>(0,
+                                                                     2 * alignof(std::max_align_t)),
+                                            ::testing::Values<size_t>(256, 1000, 4093)));
 
 //---- Pointer -----------------------------
 TEST(Pointer, DefaultIsNull)
@@ -1014,6 +1095,59 @@ TEST(Stress, RandomOpsAgainstModel)
                     ADD_FAILURE() << "live block corrupted";
                     return;
                 }
+        }
+    }
+}
+
+// Random operations with a copy of every Pointer: a copy follows free() of
+// other blocks and defrag(), and resolves to nullptr once its own block is
+// freed or moved by realloc().
+TEST(Stress, CopiesFollowTheirBlock)
+{
+    struct Live
+    {
+        Pointer p, copy;
+    };
+
+    for (unsigned run = 0; run < 10; ++run) {
+        mt19937 rng(100 + run);
+        Allocator a(buf + run % 8, 2048 + 256 * run);
+        vector<Live> live;
+        vector<Pointer> dead; // copies of freed or moved blocks
+
+        for (int step = 0; step < 2000; ++step) {
+            unsigned op = rng() % 10;
+            size_t size = 1 + rng() % 200;
+            if (op < 5 || live.empty()) {
+                try {
+                    Pointer p = a.alloc(size);
+                    live.push_back({p, p});
+                } catch (AllocError&) {
+                }
+            } else if (op < 7) {
+                size_t k = rng() % live.size();
+                dead.push_back(live[k].copy);
+                a.free(live[k].p);
+                live.erase(live.begin() + k);
+            } else if (op < 9) {
+                size_t k = rng() % live.size();
+                void* before = live[k].p.get();
+                try {
+                    a.realloc(live[k].p, size);
+                } catch (AllocError&) {
+                }
+                if (live[k].p.get() != before) { // moved: the copy is stale
+                    EXPECT_EQ(live[k].copy.get(), nullptr);
+                    dead.push_back(live[k].copy);
+                    live[k].copy = live[k].p;
+                }
+            } else
+                a.defrag();
+
+            for (Live& l : live)
+                ASSERT_EQ(l.copy.get(), l.p.get());
+            for (Pointer& d : dead)
+                ASSERT_EQ(d.get(), nullptr);
         }
     }
 }
