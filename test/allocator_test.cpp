@@ -875,6 +875,14 @@ TEST(AllocError, TypeAndMessage)
     }
 }
 
+//---- allocatorVersion --------------------
+TEST(Version, IsSet)
+{
+    const char* v = allocatorVersion();
+    ASSERT_NE(v, nullptr);
+    EXPECT_STRNE(v, "");
+}
+
 // Random alloc / free / realloc / defrag against a byte-exact model.
 TEST(Stress, RandomOpsAgainstModel)
 {

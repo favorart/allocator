@@ -1,10 +1,13 @@
 name: CI
 
+# Documentation-only changes do not run CI (such a PR is merged with --admin).
 on:
   push:
     branches: [ "master" ]
+    paths-ignore: [ "**.md", "docs/**" ]
   pull_request:
     branches: [ "**" ]
+    paths-ignore: [ "**.md", "docs/**" ]
 
 permissions:
   contents: read
@@ -32,13 +35,19 @@ jobs:
       CXX: ${{ matrix.cxx }}
     steps:
     - uses: actions/checkout@v5
+      with:
+        fetch-depth: ${{ env.RELEASE == 'true' && '0' || '1' }} # tags, for the version
+    - name: version
+      if: env.RELEASE == 'true'
+      shell: bash
+      run: echo "ALLOCATOR_VERSION=$(bash .github/next-tag.sh | sed 's/^v//')" >> "$GITHUB_ENV"
     - name: install GoogleTest
       # the runner's package index is usually fresh enough; update only if it is not
       run: |
         sudo apt-get install -y --no-install-recommends libgtest-dev ||
           { sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtest-dev; }
     - name: build (-Wall -Wextra -Wpedantic -Werror)
-      run: make all
+      run: make -j all
     - name: tests
       run: make test
     - name: tests under ASan + UBSan
@@ -49,12 +58,13 @@ jobs:
     - name: demo
       run: make demo
     - name: benchmark
+      if: env.RELEASE == 'true'
       run: make bench
     - name: pack
       if: env.RELEASE == 'true' && matrix.cxx == 'g++'
       run: |
         cmake -S . -B build-pkg -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_TESTS=OFF
-        cmake --build build-pkg --target allocator
+        cmake --build build-pkg --target allocator -j
         sh .github/pack.sh build-pkg
     - uses: actions/upload-artifact@v5
       if: env.RELEASE == 'true' && matrix.cxx == 'g++'
@@ -70,6 +80,12 @@ jobs:
     timeout-minutes: 15
     steps:
     - uses: actions/checkout@v5
+      with:
+        fetch-depth: ${{ env.RELEASE == 'true' && '0' || '1' }} # tags, for the version
+    - name: version
+      if: env.RELEASE == 'true'
+      shell: bash
+      run: echo "ALLOCATOR_VERSION=$(bash .github/next-tag.sh | sed 's/^v//')" >> "$GITHUB_ENV"
     # no system GoogleTest on Windows: CMake downloads and builds it, the cache keeps it
     - uses: actions/cache@v6
       with:
@@ -78,10 +94,11 @@ jobs:
     - name: configure
       run: cmake -S . -B build -DALLOCATOR_BUILD_BENCH=ON
     - name: build (/W4 /WX)
-      run: cmake --build build --config Release
+      run: cmake --build build --config Release -j
     - name: tests
       run: ctest --test-dir build -C Release --output-on-failure
     - name: benchmark
+      if: env.RELEASE == 'true'
       run: build/Release/allocator_bench
     - name: pack
       if: env.RELEASE == 'true'
@@ -104,15 +121,22 @@ jobs:
       HOMEBREW_NO_INSTALL_CLEANUP: 1
     steps:
     - uses: actions/checkout@v5
+      with:
+        fetch-depth: ${{ env.RELEASE == 'true' && '0' || '1' }} # tags, for the version
+    - name: version
+      if: env.RELEASE == 'true'
+      shell: bash
+      run: echo "ALLOCATOR_VERSION=$(bash .github/next-tag.sh | sed 's/^v//')" >> "$GITHUB_ENV"
     - name: install GoogleTest
       run: brew install googletest
     - name: configure
       run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DALLOCATOR_BUILD_BENCH=ON
     - name: build
-      run: cmake --build build
+      run: cmake --build build -j
     - name: tests
       run: ctest --test-dir build --output-on-failure
     - name: benchmark
+      if: env.RELEASE == 'true'
       run: build/allocator_bench
     - name: pack
       if: env.RELEASE == 'true'
@@ -145,9 +169,7 @@ jobs:
         if git tag --points-at HEAD | grep -q '^v[0-9]'; then
           echo "HEAD is already tagged"; exit 0
         fi
-        last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)
-        IFS=. read -r major minor patch <<< "${last#v}"
-        tag="v$major.$minor.$((patch + 1))"
+        tag=$(bash .github/next-tag.sh) # the version the build jobs packed
         git tag "$tag"
         git push origin "$tag"
         echo "new_tag=$tag" >> "$GITHUB_OUTPUT"

@@ -1,5 +1,27 @@
 cmake_minimum_required(VERSION 3.14)
-project(allocator LANGUAGES CXX)
+
+# The version comes from the latest tag (`git describe`): 0.0.9, or 0.0.9-2-gabc1234
+# after it. CI sets ALLOCATOR_VERSION to the tag a master build is released under.
+set(ALLOCATOR_VERSION "$ENV{ALLOCATOR_VERSION}" CACHE STRING "Library version (default: git describe)")
+if(NOT ALLOCATOR_VERSION)
+  find_program(GIT_EXECUTABLE git)
+  if(GIT_EXECUTABLE)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --tags --match "v[0-9]*"
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE git_version OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    string(REGEX REPLACE "^v" "" ALLOCATOR_VERSION "${git_version}")
+  endif()
+  if(NOT ALLOCATOR_VERSION)
+    set(ALLOCATOR_VERSION unknown)
+  endif()
+endif()
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" project_version "${ALLOCATOR_VERSION}")
+if(NOT project_version)
+  set(project_version 0.0.0)
+endif()
+
+project(allocator VERSION ${project_version} LANGUAGES CXX)
+message(STATUS "allocator ${ALLOCATOR_VERSION}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,6 +64,7 @@ endif()
 
 add_library(allocator STATIC src/allocator.cpp)
 target_include_directories(allocator PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(allocator PRIVATE ALLOCATOR_VERSION="${ALLOCATOR_VERSION}")
 
 add_executable(demo examples/demo.cpp)
 target_link_libraries(demo PRIVATE allocator)
