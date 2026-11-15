@@ -61,37 +61,40 @@ Pointer Allocator::alloc(std::size_t size)
 
 void Allocator::realloc(Pointer& p, std::size_t new_size)
 {
-    // keep the following blocks aligned
-    new_size = round_up(new_size);
-
-    Block *new_block = nullptr, *block = p.find();
-
-    if (block) {
-        unsigned char* ptr = (block->pointer_ + block->size_);
-
-        if ((block->next_ && (std::size_t)(block->next_->pointer_ - ptr) >= new_size) ||
-            (!block->next_ && ((std::size_t)((unsigned char*)last_block_ - ptr) >= new_size))) {
-            block->size_ = new_size;
-            return;
-        } else if ((new_block = put_block(new_size))) {
-            p.block_index_ = new_block->index_;
-            p.owner_ = this;
-
-            std::memcpy(new_block->pointer_, block->pointer_, block->size_);
-
-            del_block(block);
-            p.block_ = block;
-            return;
-        }
-    }
-
-    if ((new_block = put_block(new_size))) {
-        p.block_ = new_block;
-        p.block_index_ = new_block->index_;
-        p.owner_ = this;
+    if (!new_size) {
+        free(p);
         return;
     }
-    throw err_;
+    if (new_size > kMaxRequest)
+        throw err_;
+
+    Block* block = p.find();
+    if (!block) {
+        p = alloc(new_size);
+        return;
+    }
+
+    const std::size_t size = round_up(new_size);
+    // in place: up to the next block, or up to the descriptors
+    unsigned char* limit =
+        block->next_ ? block->next_->pointer_ : reinterpret_cast<unsigned char*>(last_block_);
+    if (static_cast<std::size_t>(limit - block->pointer_) >= size) {
+        block->size_ = static_cast<std::uint32_t>(size);
+        return;
+    }
+
+    // move: here size > block->size_
+    Block* moved = put_block(size);
+    if (!moved)
+        throw err_;
+
+    std::memcpy(moved->pointer_, block->pointer_, block->size_);
+
+    p.block_index_ = moved->index_;
+    p.owner_ = this;
+    // `moved` is the lowest descriptor: del_block() puts it into block's slot
+    del_block(block);
+    p.block_ = block;
 }
 
 void Allocator::free(Pointer& p)
