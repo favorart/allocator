@@ -15,6 +15,6 @@ add_library(allocator STATIC src/allocator.cpp)
 target_include_directories(allocator PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 enable_testing()
-add_executable(allocator_test test/main.cpp test/allocator_test.cpp)
+add_executable(allocator_test test/allocator_test.cpp)
 target_link_libraries(allocator_test PRIVATE allocator)
 add_test(NAME allocator_test COMMAND allocator_test)
