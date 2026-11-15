@@ -105,6 +105,26 @@ model after each operation.
 CI builds and tests with GCC and Clang on Ubuntu (plain and with ASan + UBSan),
 with MSVC (`/W4 /WX`) on Windows and with Apple Clang on macOS.
 
+## Performance
+
+`make bench` (or `-DALLOCATOR_BUILD_BENCH=ON`) runs
+[`bench/allocator_bench.cpp`](bench/allocator_bench.cpp) against
+`malloc`/`free`. 4000 blocks of 16..256 bytes, Clang 14 `-O2`, x86-64 laptop
+(WSL2), best of 5 runs:
+
+| Scenario | malloc/free | Allocator |
+|---|---:|---:|
+| alloc N, free in reverse order | 33 ns/op | 4.6 µs/op |
+| free in random order | 36 ns/op | 184 ns/op |
+| alloc into a fragmented arena | — | 19 µs/op |
+| `defrag()` | — | 6.4 GB/s of live data |
+| `Pointer::get()`, slot cached | — | 2.3 ns |
+| `Pointer::get()`, first call after frees | — | 163 ns |
+
+The price of "no extra memory" is visible: `alloc()` walks the whole list
+(first fit, then the tail), so it costs O(blocks), and `free()` pays for
+resolving the `Pointer`. Compaction itself is a single `memmove` pass.
+
 ## Releases
 
 Every push to `master` that passes CI is tagged with the next patch version
@@ -123,6 +143,7 @@ is a tag pushed by hand; the numbering continues from it.
 | [`src/allocator.cpp`](src/allocator.cpp) | the implementation |
 | [`test/allocator_test.cpp`](test/allocator_test.cpp) | tests, with a tiny built-in harness |
 | [`examples/demo.cpp`](examples/demo.cpp) | the usage tour |
+| [`bench/allocator_bench.cpp`](bench/allocator_bench.cpp) | the benchmark |
 
 To use the allocator in another project, add `src/allocator.cpp` to the build
 and `include/` to the include path, or `add_subdirectory()` this repository
