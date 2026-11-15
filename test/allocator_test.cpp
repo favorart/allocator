@@ -467,6 +467,29 @@ TEST(Regression, AllocatorIsNotCopyable)
     SUCCEED();
 }
 
+// free() and realloc() resolved a Pointer of another allocator there
+// and unlinked the block here: both allocators were corrupted.
+TEST(Regression, ForeignPointerIsRejected)
+{
+    Allocator a(buf, 4096), b(buf + 8192, 4096);
+    Pointer a1 = a.alloc(64), a2 = a.alloc(64);
+    Pointer b1 = b.alloc(64), b2 = b.alloc(64);
+    for (Pointer* p : {&a1, &a2, &b1, &b2})
+        writeTo(*p, 64);
+
+    EXPECT_ALLOC_ERROR(a.free(b1), InvalidFree);
+    EXPECT_ALLOC_ERROR(a.realloc(b1, 512), InvalidFree);
+    EXPECT_ALLOC_ERROR(a.realloc(b1, 0), InvalidFree);
+
+    for (Pointer* p : {&a1, &a2, &b1, &b2})
+        EXPECT_TRUE(isDataOk(*p, 64));
+    Pointer a3 = a.alloc(64);
+    EXPECT_TRUE(static_cast<char*>(a3.get()) < buf + 4096);
+    b.free(b1);
+    EXPECT_EQ(b1.get(), nullptr);
+    EXPECT_TRUE(isDataOk(b2, 64));
+}
+
 // A copy of a freed smart pointer must resolve to nullptr.
 TEST(Regression, StaleCopyIsNull)
 {
