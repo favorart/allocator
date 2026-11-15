@@ -8,6 +8,7 @@
 #include <iostream>
 #include <random>
 #include <set>
+#include <type_traits>
 #include <vector>
 
 /*
@@ -451,6 +452,19 @@ TEST(Regression, IndicesStayUnique)
     EXPECT_EQ(static_cast<char*>(C.get())[0], 'c');
     EXPECT_EQ(static_cast<char*>(F.get())[0], 'f');
     (void)A;
+}
+
+// A copy of an allocator managed the same buffer with its own descriptor
+// bounds: the copy and the original handed out one address twice.
+TEST(Regression, AllocatorIsNotCopyable)
+{
+    static_assert(!std::is_copy_constructible<Allocator>::value, "");
+    static_assert(!std::is_copy_assignable<Allocator>::value, "");
+    static_assert(!std::is_move_constructible<Allocator>::value, "");
+    static_assert(!std::is_move_assignable<Allocator>::value, "");
+    // no virtual functions, a non-virtual destructor: not a base class
+    static_assert(std::is_final<Allocator>::value && std::is_final<Pointer>::value, "");
+    SUCCEED();
 }
 
 // A copy of a freed smart pointer must resolve to nullptr.
